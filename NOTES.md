@@ -8,8 +8,8 @@
   (`Impossible-Playdate/app/gamepad_input.py`) has a working DualShock 4
   reader for this board.
 - A 160-column (2-pixel-wide) VoxelSpace mode, to see whether it reaches 60 fps.
-- Cornell box: progressive path tracer with the FPU in asm, then a baked room
-  with live objects.
+- Cornell box: more scene (glass sphere, the classic boxes), on-screen sample
+  count, then a baked room with live objects.
 
 VoxelSpace terrain and Cornell box rendering in CircuitPython, with the hot
 loops in Turbo (`@micropython.viper` compiled by `mpy-cross`, plus
@@ -153,3 +153,44 @@ difference| of luminance over 90 frames of the flight path.
 - The camera height is now fixed point (8 fractional bits): whole units made
   near terrain jump a few pixels at a time as the flight climbed.
 - Coarser far levels also made frames faster (22-26 ms in flight).
+
+## Cornell box (step 5)
+
+Progressive path tracer, 240x240 centered on the screen, drawn straight into
+the framebuffer a row at a time (no back buffer); a float32 accumulation
+buffer (690 KB) in PSRAM. Unit-cube box seen through its open front: red/green
+side walls, white floor/ceiling/back, a square ceiling light, a diffuse and a
+mirror sphere.
+
+- Per path: up to 3 interactions; the box exit is 3 divides (axis bounds
+  ahead), 2 sphere tests; next event estimation (one light sample, shadowed
+  only by the spheres) at every diffuse hit; cosine-weighted bounces (normal
+  + random point in the unit ball, by rejection); emission counts only along
+  camera -> mirror* -> light, which drops the slow mirror caustics
+  (fireflies). xorshift32 per pixel, seeded from pixel index and pass.
+- `tools/cornell_scene.py`: scene, parameter block layout; writes
+  `app/cornell_scene.py` with every float constant as its float32 **bit
+  pattern** (decimal float parsing on the board might round differently).
+- `tools/cornell_ref.py`: numpy float32 reference, vectorized across pixels,
+  same operations in the same order as the asm: board pixels and accumulation
+  sums are **bit-identical** (full passes compared by CRC). 64 passes of the
+  whole image take ~2 s on the desktop.
+- `tools/gen_cornell_asm.py` -> `src/cornell_asm.py` (~700 lines, 2.4 KB):
+  `trace_row(block)`. `app/cornell.py` drives it a row at a time.
+- **0.73 s per pass** (~12.5 us, ~1900 cycles per pixel per sample): 64
+  samples in under a minute, 256 in ~3 minutes.
+
+asm notes from this kernel:
+
+- FPU instructions available: vadd, vsub, vmul, vdiv, vsqrt, vneg, vcmp +
+  `vmrs(APSR_nzcv, FPSCR)`, vcvt both ways, vmov core<->s, vldr/vstr with
+  offsets to 1020. Not available: vabs, vmla/vfma (good: no fused rounding),
+  vmov between s registers or of an immediate, vldm/vpush.
+- No float immediates: constants live in the block. Copy s registers through
+  a core register (`vmov(r0, s); vmov(s', r0)`), keeping the bits.
+- Branches: plain `b`/`bcc` reach only ~±2 KB / ±256 bytes; `beq_w` etc.
+  reach ±1 MB; there is no wide unconditional branch, so long jumps use `bl`
+  (fine outside subroutines). `bl`/`bx(lr)` subroutines work.
+- NaN-safe skips after vcmp: skip unless a > b: `ble`; a < b: `bpl`;
+  a >= b: `blt`; a <= b: `bhi`.
+- s16-s31 are callee-saved: the kernel stores them in the block.

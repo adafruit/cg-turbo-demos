@@ -24,7 +24,17 @@ on generated terrain, at a locked 30 fps (320x200, letterboxed).
 ![shaded height map](docs/voxelspace_shaded.png)
 ![height scales](docs/height_scales.png)
 
-Coming: USB gamepad flying, and a Cornell box path tracer. See
+**Cornell box** (`app/cornell_demo.py`): a progressive path tracer, 240x240,
+one sample per pixel per pass (0.73 s), refining on screen from noise to a
+clean image in a minute or two. The asm kernel uses the RP2350's FPU and is
+bit-identical to the numpy reference in `tools/cornell_ref.py`. Button 1
+starts over.
+
+![Cornell box](docs/cornell.png)
+
+Pick the demo in `app/code.py` (`DEMO = "voxel_demo"` or `"cornell_demo"`).
+
+Coming: USB gamepad flying, and more Cornell box scenes. See
 [NOTES.md](NOTES.md) for the plan, every measurement, and what was learned
 about making Turbo code fast on this board.
 

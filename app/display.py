@@ -18,7 +18,8 @@ BACK_HEIGHT = 200
 
 
 class Display:
-    def __init__(self, scratch=0):
+    def __init__(self, scratch=0, back=True):
+        """back=False: no back buffer, for demos that draw straight to the screen."""
         displayio.release_displays()
         self.framebuffer = picodvi.Framebuffer(
             WIDTH,
@@ -35,13 +36,15 @@ class Display:
         )
         self.screen = memoryview(self.framebuffer).cast("B")
         self.scratch = bytearray(scratch)
-        self.back = bytearray(WIDTH * BACK_HEIGHT * 2)
+        self.back = bytearray(WIDTH * BACK_HEIGHT * 2 if back else 0)
         for name in ("scratch", "back"):
+            if not len(getattr(self, name)):
+                continue
             where = mem.address(getattr(self, name))
             if 0 < where < mem.SRAM:
                 print("warning: %s buffer is in PSRAM (0x%08x): rendering will be slow" % (name, where))
         top = (HEIGHT - BACK_HEIGHT) // 2 * WIDTH * 2
-        self.letterbox = self.screen[top : top + len(self.back)]
+        self.letterbox = self.screen[top : top + len(self.back)] if back else None
         self.wait_for_vblank = getattr(self.framebuffer, "wait_for_vblank", None)
         row = bytes(WIDTH * 2)
         for y in range(HEIGHT):
