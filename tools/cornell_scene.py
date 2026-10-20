@@ -35,8 +35,8 @@ MIRROR_SPHERE = ((0.30, 0.25, 0.65), 0.25, 0.95)  # center, radius, reflectance
 # original's measurements in a 555-unit box, mirrored so red stays on the
 # left: (center x, z on the floor), (width, height, depth), rotation about y.
 BOXES = (
-    ((0.665, 0.300), (0.300, 0.300, 0.300), 0.31),  # the short cube, front right
-    ((0.335, 0.630), (0.270, 0.600, 0.270), -0.30),  # the tall box, rear left
+    ((0.665, 0.300), (0.300, 0.300, 0.300), -0.31),  # the short cube, front right
+    ((0.335, 0.630), (0.270, 0.600, 0.270), 0.30),  # the tall box, rear left
 )
 BOX_FIELDS = ("CX", "CY", "CZ", "C", "S", "HX", "HY", "HZ", "NHX", "NHY", "NHZ")
 EPSILON = 1e-4
