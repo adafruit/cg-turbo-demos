@@ -66,7 +66,12 @@ def main():
         port.write(b"\x04")
         reader.until(b"OK", 5)
         # output, \x04, errors, \x04, then the next > prompt
-        data = reader.until(b"\x04>", options.timeout)
+        try:
+            data = reader.until(b"\x04>", options.timeout)
+        except (serial.SerialException, TimeoutError) as error:
+            # e.g. the watchdog reset the board: show what it printed first
+            sys.stdout.write(reader.pending.decode("utf-8", "replace"))
+            sys.exit("\nboard stopped answering: %s" % error)
         output, _, errors = data[:-2].partition(b"\x04")
         sys.stdout.write(output.decode("utf-8", "replace"))
         if errors.strip():

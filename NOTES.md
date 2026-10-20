@@ -184,6 +184,27 @@ mirror sphere.
   (`cornell_scene.WALL_SLOTS`) and starts over; button 2 starts over. The
   reference has the same switch (`use_white_walls()`, `--white-walls`); both
   looks are bit-identical on the board.
+- Button 3 swaps the spheres for the original's two boxes (`set_boxes()`,
+  the `MODE` slot; reference `use_boxes()` / `--boxes`): a short cube front
+  right, a taller, slightly narrower box rear left, both rotated about y.
+  Each box is a slab test in its own rotated frame, recording the entry face
+  (`HIT_FACE`) for the normal, and the boxes shadow the light. 1.29 s per
+  pass (each box test costs 6 divides, for camera and shadow rays alike)
+  vs 0.74 s for the spheres. All modes are bit-identical to the reference.
+- **Slice-assigning into a big bytearray is very slow in CircuitPython**:
+  zeroing the 690 KB accumulation buffer row by row (`a[i:j] = zeros`, 2880
+  bytes each) took 42 ms per row, 10 s in all. `mem.zero()` (viper) takes
+  98 ms.
+
+debugging asm on the board:
+
+- A kernel stuck in asm can't be interrupted (Ctrl-C, USB): only reset.
+  Probes arm `microcontroller.watchdog` (there is no `deinit()`: set
+  `mode = None` to disarm), feeding it more often than the slowest step.
+- Output printed just before a long asm call may not leave the board (USB
+  is serviced between bytecodes): `time.sleep()` after diagnostic prints.
+- Before blaming the asm, time the Python around it: the "hang" that led
+  here was a 10 s `reset()`, not the kernel.
 
 asm notes from this kernel:
 

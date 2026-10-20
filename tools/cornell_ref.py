@@ -34,7 +34,13 @@ def use_white_walls(white):
     C.update({name: F(value) for name, value in scene.float_values(white).items()})
 ONE, TWO, ZERO, EPS, FAR = C["ONE"], C["TWO"], C["ZERO"], C["EPSILON"], C["FAR"]
 
-LEFT, RIGHT, FLOOR, CEILING, BACK, FRONT, DIFFUSE, MIRROR = range(8)
+LEFT, RIGHT, FLOOR, CEILING, BACK, FRONT, DIFFUSE, MIRROR, BOX = range(9)
+MODE = {"boxes": False}
+
+
+def use_boxes(boxes):
+    """The classic two boxes instead of the spheres, as the board's button 3 does."""
+    MODE["boxes"] = boxes
 
 
 def rand(x, mask):
@@ -59,6 +65,58 @@ def sphere_t(ox, oy, oz, dx, dy, dz, cx, cy, cz, r2):
     disc = b * b - cc
     t = -b - np.sqrt(disc)
     return np.where(disc > ZERO, t, F(np.nan))
+
+
+def box_t(ox, oy, oz, dx, dy, dz, b):
+    """Entry distance of the ray into box b (NaN where it misses) and the face
+    it enters through: axis * 2 + (1 for the + face), in the box's frame."""
+    k = lambda f: C["B%d_%s" % (b, f)]  # noqa: E731
+    c, s = k("C"), k("S")
+    qx, qy, qz = ox - k("CX"), oy - k("CY"), oz - k("CZ")
+    lx, lz = qx * c + qz * s, qz * c - qx * s
+    ldx, ldz = dx * c + dz * s, dz * c - dx * s
+    tnear = tfar = face = None
+    for axis, (l, ld, h) in enumerate(((lx, ldx, "X"), (qy, dy, "Y"), (lz, ldz, "Z"))):
+        t1 = (k("NH" + h) - l) / ld
+        t2 = (k("H" + h) - l) / ld
+        swap = t1 > t2
+        lo, hi = np.where(swap, t2, t1), np.where(swap, t1, t2)
+        f = np.where(swap, 2 * axis + 1, 2 * axis)
+        if axis == 0:
+            tnear, tfar, face = lo, hi, f
+        else:
+            up = lo > tnear
+            tnear, face = np.where(up, lo, tnear), np.where(up, f, face)
+            tfar = np.where(hi < tfar, hi, tfar)
+    ok = (tnear <= tfar) & (tnear > EPS)
+    return np.where(ok, tnear, F(np.nan)), face
+
+
+def box_normal(b, face):
+    """World normal of box b's face (axis * 2 + positive), as the asm builds it."""
+    c, s = C["B%d_C" % b], C["B%d_S" % b]
+    one, zero = ONE, ZERO
+    return {
+        0: (-c, zero, -s),
+        1: (c, zero, s),
+        2: (zero, -one, zero),
+        3: (zero, one, zero),
+        4: (s, zero, -c),
+        5: (-s, zero, c),
+    }[face]
+
+
+def occluders():
+    if MODE["boxes"]:
+        return [("box", b) for b in range(2)]
+    return [("sphere", "D_"), ("sphere", "M_")]
+
+
+def occluder_t(kind, which, ox, oy, oz, dx, dy, dz):
+    if kind == "box":
+        return box_t(ox, oy, oz, dx, dy, dz, which)
+    t = sphere_t(ox, oy, oz, dx, dy, dz, C[which + "X"], C[which + "Y"], C[which + "Z"], C[which + "R2"])
+    return t, None
 
 
 def trace_rows(rows, pass_number, accum):
@@ -98,11 +156,16 @@ def trace_rows(rows, pass_number, accum):
             better = (t > EPS) & (t < tmin)
             tmin = np.where(better, t, tmin)
             hit = np.where(better, np.where(ahead, high, low), hit)
-        for kind, prefix in ((DIFFUSE, "D_"), (MIRROR, "M_")):
-            t = sphere_t(ox, oy, oz, dx, dy, dz, C[prefix + "X"], C[prefix + "Y"], C[prefix + "Z"], C[prefix + "R2"])
+        code = np.zeros(len(index), dtype=np.int32)  # box * 8 + face, for box hits
+        for kind, which in occluders():
+            t, face = occluder_t(kind, which, ox, oy, oz, dx, dy, dz)
             better = (t > EPS) & (t < tmin)
             tmin = np.where(better, t, tmin)
-            hit = np.where(better, kind, hit)
+            if kind == "box":
+                hit = np.where(better, BOX, hit)
+                code = np.where(better, which * 8 + face, code)
+            else:
+                hit = np.where(better, DIFFUSE if which == "D_" else MIRROR, hit)
         alive &= hit != FRONT
 
         hx, hy, hz = ox + dx * tmin, oy + dy * tmin, oz + dz * tmin
@@ -139,6 +202,12 @@ def trace_rows(rows, pass_number, accum):
         nx = np.select([hit == LEFT, hit == RIGHT, hit == DIFFUSE], [zero + ONE, zero - ONE, sx], zero)
         ny = np.select([hit == FLOOR, hit == CEILING, hit == DIFFUSE], [zero + ONE, zero - ONE, sy], zero)
         nz = np.select([hit == BACK, hit == DIFFUSE], [zero - ONE, sz], zero)
+        if MODE["boxes"]:
+            for b in range(2):
+                for face in range(6):
+                    on = (hit == BOX) & (code == b * 8 + face)
+                    fx, fy, fz = box_normal(b, face)
+                    nx, ny, nz = np.where(on, fx, nx), np.where(on, fy, ny), np.where(on, fz, nz)
         albedo = []
         for ch in "RGB":
             albedo.append(
@@ -165,8 +234,8 @@ def trace_rows(rows, pass_number, accum):
         cos_s = dot(nx, ny, nz, wx, wy, wz)
         cos_l = wy
         lit = diffuse & (cos_s > ZERO) & (cos_l > ZERO)
-        for prefix in ("D_", "M_"):
-            t = sphere_t(hx, hy, hz, wx, wy, wz, C[prefix + "X"], C[prefix + "Y"], C[prefix + "Z"], C[prefix + "R2"])
+        for kind, which in occluders():
+            t, _ = occluder_t(kind, which, hx, hy, hz, wx, wy, wz)
             lit &= ~((t > EPS) & (t < dist))
         g = ((cos_s * cos_l) * C["LIGHT_K"]) / dist2
         lr = np.where(lit, lr + (tr * C["LE_R"]) * g, lr)
@@ -231,8 +300,10 @@ def main():
     parser.add_argument("--passes", type=int, default=16)
     parser.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "cornell.png")
     parser.add_argument("--white-walls", action="store_true")
+    parser.add_argument("--boxes", action="store_true", help="the classic two boxes instead of the spheres")
     options = parser.parse_args()
     use_white_walls(options.white_walls)
+    use_boxes(options.boxes)
     accum = np.zeros((scene.SIZE, scene.SIZE, 3), dtype=F)
     rows = list(range(scene.SIZE))
     start = time.monotonic()
