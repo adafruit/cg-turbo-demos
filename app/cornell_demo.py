@@ -1,7 +1,8 @@
 """Cornell box path tracer: the image refines with every pass.
 
 Button 1 paints the side walls white, or back to red and green. Button 2
-starts over from zero samples.
+starts over from zero samples. Button 3 swaps the two spheres for the
+original's two boxes, and back.
 """
 
 import gc
@@ -23,7 +24,7 @@ import cornell
 import cornell_scene as scene
 
 box = cornell.Cornell(screen, screen.scratch)
-buttons = keypad.Keys((board.BUTTON1, board.BUTTON2), value_when_pressed=False, pull=True)
+buttons = keypad.Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 gc.collect()
 print("Cornell box: %dx%d, free heap %d" % (scene.SIZE, scene.SIZE, gc.mem_free()))
 
@@ -42,9 +43,12 @@ while True:
         if restart == 0:
             box.set_white_walls(not box.white_walls)
             print("walls", "white" if box.white_walls else "red and green")
-        else:
+        elif restart == 1:
             box.reset()
             print("restarted")
+        else:
+            box.set_boxes(not box.boxes)
+            print("objects:", "two boxes" if box.boxes else "two spheres")
         started = time.monotonic()
         continue
     box.end_pass()

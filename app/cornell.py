@@ -31,6 +31,13 @@ class Cornell:
         self.out_address = mem.address(screen.screen) + (top * display.WIDTH + left) * 2
         self.passes = 0
         self.white_walls = False
+        self.boxes = False
+
+    def set_boxes(self, boxes):
+        """The classic two boxes, or the two spheres; starts over."""
+        self.block[scene.MODE] = 1 if boxes else 0
+        self.boxes = boxes
+        self.reset()
 
     def set_white_walls(self, white):
         """White side walls, or the classic red and green; starts over."""
@@ -41,10 +48,7 @@ class Cornell:
         self.reset()
 
     def reset(self):
-        zeros = bytes(scene.SIZE * 12)
-        for row in range(scene.SIZE):
-            start = row * len(zeros)
-            self.accum[start : start + len(zeros)] = zeros
+        mem.zero(self.accum, len(self.accum) // 4)
         self.passes = 0
 
     def trace_row(self, row):

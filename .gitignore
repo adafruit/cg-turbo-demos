@@ -6,3 +6,5 @@ backup/
 tools/mpy-cross
 __pycache__/
 .DS_Store
+# reference images (not ours to publish)
+reference/

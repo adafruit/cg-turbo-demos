@@ -33,8 +33,10 @@ bit-identical to the numpy reference in `tools/cornell_ref.py`.
 | --- | --- |
 | 1 | side walls white / back to red and green (starts over) |
 | 2 | start over from zero samples |
+| 3 | the original's two boxes / back to the two spheres (starts over) |
 
 ![Cornell box](docs/cornell.png)
+![Cornell box with the classic boxes](docs/cornell_boxes.png)
 ![Cornell box with white walls](docs/cornell_white.png)
 
 Pick the demo in `app/code.py` (`DEMO = "voxel_demo"` or `"cornell_demo"`).

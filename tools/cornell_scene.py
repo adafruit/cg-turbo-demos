@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 SIZE = 240  # image width and height
 DEPTH = 3  # surface interactions per path
-EXPOSURE = 1.0
+EXPOSURE = 1.8
 
 CAMERA = (0.5, 0.5, -1.35)
 WHITE = (0.725, 0.71, 0.68)  # the classic Cornell box reflectances
@@ -31,6 +31,14 @@ LIGHT_SIZE = 0.26
 EMISSION = (17.0, 12.0, 4.0)
 DIFFUSE_SPHERE = ((0.70, 0.20, 0.38), 0.20, (0.75, 0.75, 0.75))  # center, radius, albedo
 MIRROR_SPHERE = ((0.30, 0.25, 0.65), 0.25, 0.95)  # center, radius, reflectance
+# The classic two boxes (button 3 swaps them in for the spheres), after the
+# original's measurements in a 555-unit box, mirrored so red stays on the
+# left: (center x, z on the floor), (width, height, depth), rotation about y.
+BOXES = (
+    ((0.665, 0.300), (0.300, 0.300, 0.300), -0.31),  # the short cube, front right
+    ((0.335, 0.630), (0.270, 0.600, 0.270), 0.30),  # the tall box, rear left
+)
+BOX_FIELDS = ("CX", "CY", "CZ", "C", "S", "HX", "HY", "HZ", "NHX", "NHY", "NHZ")
 EPSILON = 1e-4
 FAR = 1e30
 
@@ -52,6 +60,8 @@ INTS = [
     "PIXEL",
     "SPECULAR",
     "BOUNCE",
+    "MODE",  # 0: the two spheres, 1: the two boxes
+    "HIT_FACE",  # working: box * 8 + axis * 2 + (1 for the + face)
 ]
 FLOATS = [
     "ONE",
@@ -97,7 +107,7 @@ FLOATS = [
     "K5",  # 31.999: [0, 1] to 5 bits
     "K6",  # 63.999: [0, 1] to 6 bits
     "SCALE",  # working: exposure / samples
-]
+] + ["B%d_%s" % (b, f) for b in range(2) for f in BOX_FIELDS]
 SAVE = 16  # s16-s31 belong to the caller: saved here
 INT_BASE = 0
 FLOAT_BASE = 32
@@ -170,7 +180,19 @@ def float_values(white_walls=False):
         "K5": 31.999,
         "K6": 63.999,
         "SCALE": 0.0,
+        **box_values(),
     }
+
+
+def box_values():
+    values = {}
+    for b, ((cx, cz), (w, h, d), angle) in enumerate(BOXES):
+        hx, hy, hz = w / 2, h / 2, d / 2
+        for field, value in zip(
+            BOX_FIELDS, (cx, hy, cz, math.cos(angle), math.sin(angle), hx, hy, hz, -hx, -hy, -hz)
+        ):
+            values["B%d_%s" % (b, field)] = value
+    return values
 
 
 def block_words():
@@ -197,6 +219,7 @@ def main():
         lines.append("%s = %d" % (name, slot(name)))
     lines.append("SCALE = %d" % slot("SCALE"))
     lines.append("EXPOSURE = %d" % slot("EXPOSURE"))
+    lines.append("MODE = %d" % slot("MODE"))
     lines.append("# the side walls' color slots, and their words for each look")
     lines.append("WALL_SLOTS = (%s)" % ", ".join(str(slot(n)) for n in WALL_NAMES))
     for name, white in (("COLORED_WALLS", False), ("WHITE_WALLS", True)):

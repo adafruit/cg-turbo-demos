@@ -10,7 +10,8 @@ pixels are bit-identical; keep the two in step.
 
 Registers: s0-s2 ray origin, s3-s5 direction, s6-s8 throughput, s9-s11
 radiance, s12 nearest hit distance, s13-s15 hit point, s16-s18 normal, s19-s21
-albedo, s22-s29 working, s28 mostly constants; the rand subroutine leaves its
+albedo, s22-s29 working, s28 mostly constants (the box tests borrow more:
+see their register maps); the rand subroutine leaves its
 float in s31 and uses s30. r7 is the block, r6 the random state, r5 the kind
 of surface hit. s16-s31 belong to the caller and are saved in the block.
 
@@ -27,7 +28,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import cornell_scene as scene  # noqa: E402
 
-LEFT, RIGHT, FLOOR, CEILING, BACK, FRONT, DIFFUSE, MIRROR = range(8)
+LEFT, RIGHT, FLOOR, CEILING, BACK, FRONT, DIFFUSE, MIRROR, BOX = range(9)
 
 
 class Asm:
@@ -93,6 +94,63 @@ class Asm:
 
     def rand(self):
         self("bl(rand)")
+
+    def box(self, o, d, b, regs, k, missed):
+        """Entry distance of the ray (o, d) into box b, in the box's frame:
+        regs["tnear"], with the entry face (axis * 2 + positive) in r2; or a
+        branch to missed. Uses r0, r1, r3 and the registers in regs."""
+        L, LD, t1, t2, tnear, tfar, tmp = (
+            regs["l"], regs["ld"], regs["t1"], regs["t2"], regs["tnear"], regs["tfar"], regs["tmp"]
+        )
+        f = lambda name: "B%d_%s" % (b, name)  # noqa: E731
+        for axis, reg, src in zip(("CX", "CY", "CZ"), L, o):
+            self.ld(k, f(axis))
+            self("vsub(%s, %s, %s)" % (reg, src, k))
+        for dst, src in ((L, L), (LD, d)):
+            # x' = x * c + z * s; z' = z * c - x * s
+            self.ld(k, f("C"))
+            self("vmul(%s, %s, %s)" % (tmp[0], src[0], k))
+            self("vmul(%s, %s, %s)" % (tmp[1], src[2], k))
+            self.ld(k, f("S"))
+            self("vmul(%s, %s, %s)" % (tmp[2], src[2], k))
+            self("vmul(%s, %s, %s)" % (tmp[3], src[0], k))
+            self("vadd(%s, %s, %s)" % (dst[0], tmp[0], tmp[2]))
+            self("vsub(%s, %s, %s)" % (dst[2], tmp[1], tmp[3]))
+        self.copy(LD[1], d[1])
+        for axis, (l, ld, h) in enumerate(zip(L, LD, "XYZ")):
+            noswap, joined = self.new("noswap"), self.new("slab")
+            self.ld(k, f("NH" + h))
+            self("vsub(%s, %s, %s)" % (t1, k, l))
+            self("vdiv(%s, %s, %s)" % (t1, t1, ld))
+            self.ld(k, f("H" + h))
+            self("vsub(%s, %s, %s)" % (t2, k, l))
+            self("vdiv(%s, %s, %s)" % (t2, t2, ld))
+            self.skip_unless(t1, ">", t2, noswap)
+            self("vmov(r0, %s)" % t1)
+            self("vmov(r3, %s)" % t2)
+            self("vmov(%s, r3)" % t1)
+            self("vmov(%s, r0)" % t2)
+            self("mov(r1, %d)" % (2 * axis + 1))
+            self("b(%s)" % joined)
+            self.label(noswap)
+            self("mov(r1, %d)" % (2 * axis))
+            self.label(joined)
+            if axis == 0:
+                self.copy(tnear, t1)
+                self.copy(tfar, t2)
+                self("mov(r2, r1)")
+            else:
+                up, down = self.new("not_later"), self.new("not_sooner")
+                self.skip_unless(t1, ">", tnear, up)
+                self.copy(tnear, t1)
+                self("mov(r2, r1)")
+                self.label(up)
+                self.skip_unless(t2, "<", tfar, down)
+                self.copy(tfar, t2)
+                self.label(down)
+        self.skip_unless(tnear, "<=", tfar, missed)
+        self.ld(k, "EPSILON")
+        self.skip_unless(tnear, ">", k, missed)
 
     def sphere(self, o, d, prefix, tmp, k, missed):
         """Nearest-hit distance of the ray (o, d) with a sphere into tmp[4],
@@ -211,6 +269,9 @@ def generate():
         a.copy("s12", "s29")
         a("mov(r5, r1)")
         a.label(skip)
+    a.ldi("r0", "MODE")
+    a("cmp(r0, 0)")
+    a("bne_w(nearest_boxes)")
     for kind, prefix in ((DIFFUSE, "D_"), (MIRROR, "M_")):
         skip = a.new("missed")
         a.comment("sphere " + prefix[0])
@@ -221,6 +282,24 @@ def generate():
         a.copy("s12", "s26")
         a("mov(r5, %d)" % kind)
         a.label(skip)
+    a.jump("nearest_done")
+    a.label("nearest_boxes")
+    nearest = dict(
+        l=("s13", "s14", "s15"), ld=("s16", "s17", "s18"), t1="s22", t2="s23", tnear="s19", tfar="s20",
+        tmp=("s24", "s25", "s26", "s27"),
+    )
+    for b in range(2):
+        skip = a.new("missed")
+        a.comment("box %d" % b)
+        a.box(O, D, b, nearest, "s28", skip)
+        a.skip_unless("s19", "<", "s12", skip)
+        a.copy("s12", "s19")
+        a("mov(r5, %d)" % BOX)
+        a("mov(r3, %d)" % (8 * b))
+        a("add(r3, r3, r2)")
+        a.sti("r3", "HIT_FACE")
+        a.label(skip)
+    a.label("nearest_done")
     a("cmp(r5, %d)" % FRONT)
     a("beq_w(pixel_done)")
     for h, o, d in zip(H, O, D):
@@ -266,6 +345,35 @@ def generate():
     a.jump("next_bounce")
 
     a.label("diffuse")
+    a("cmp(r5, %d)" % BOX)
+    a("bne_w(not_box)")
+    a.comment("box: the entry face's normal, rotated back to the world")
+    a.ldi("r0", "HIT_FACE")
+    for b in range(2):
+        c, sn = "B%d_C" % b, "B%d_S" % b
+        normals = {
+            0: ((c, True), ("ZERO", False), (sn, True)),
+            1: ((c, False), ("ZERO", False), (sn, False)),
+            2: (("ZERO", False), ("ONE", True), ("ZERO", False)),
+            3: (("ZERO", False), ("ONE", False), ("ZERO", False)),
+            4: ((sn, False), ("ZERO", False), (c, True)),
+            5: ((sn, True), ("ZERO", False), (c, False)),
+        }
+        for face, parts in normals.items():
+            nxt = a.new("not_face")
+            a("cmp(r0, %d)" % (8 * b + face))
+            a("bne_w(%s)" % nxt)
+            for n, (name, negate) in zip(N, parts):
+                a.ld(n, name)
+                if negate:
+                    a("vneg(%s, %s)" % (n, n))
+            a.jump("box_albedo")
+            a.label(nxt)
+    a.label("box_albedo")
+    for r, ch in zip(ALB, "RGB"):
+        a.ld(r, "WHITE_" + ch)
+    a.jump("shade")
+    a.label("not_box")
     a("cmp(r5, %d)" % DIFFUSE)
     a("bne_w(walls)")
     a.ld("s27", "D_INV_R")
@@ -337,6 +445,9 @@ def generate():
     a.ld("s28", "LIGHT_K")
     a("vmul(s29, s29, s28)")
     a("vdiv(s29, s29, s25)")
+    a.ldi("r0", "MODE")
+    a("cmp(r0, 0)")
+    a("bne_w(shadow_boxes)")
     for prefix in ("D_", "M_"):
         clear = a.new("clear")
         a.sphere(O, W, prefix, ("s19", "s20", "s21", "s30", "s31", "s12"), "s28", clear)
@@ -345,6 +456,19 @@ def generate():
         a.skip_unless("s31", "<", "s26", clear)
         a.jump("unlit")
         a.label(clear)
+    a.jump("shadow_done")
+    a.label("shadow_boxes")
+    shadow = dict(
+        l=("s12", "s13", "s14"), ld=("s15", "s19", "s20"), t1="s30", t2="s31", tnear="s21", tfar="s27",
+        tmp=("s3", "s4", "s5", "s25"),
+    )
+    for b in range(2):
+        clear = a.new("clear")
+        a.box(O, W, b, shadow, "s28", clear)
+        a.skip_unless("s21", "<", "s26", clear)
+        a.jump("unlit")
+        a.label(clear)
+    a.label("shadow_done")
     for t, l, le in zip(T, L, ("LE_R", "LE_G", "LE_B")):
         a.ld("s28", le)
         a("vmul(s28, %s, s28)" % t)
