@@ -194,7 +194,7 @@ mirror sphere.
 - Exposure 1.8 (was 1.0): the white surfaces now nearly match the classic
   reference rendering; its colored walls are darker and less saturated than
   ours (it used measured spectra). 1.4 was tried first.
-  brightness. 5 interactions per path instead of 3 was tried and dropped:
+  5 interactions per path instead of 3 was tried and dropped:
   only 3-4% brighter, for 35% longer passes (0.98 s spheres, 1.76 s boxes).
 - **Slice-assigning into a big bytearray is very slow in CircuitPython**:
   zeroing the 690 KB accumulation buffer row by row (`a[i:j] = zeros`, 2880
