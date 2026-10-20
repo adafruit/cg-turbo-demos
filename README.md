@@ -27,10 +27,15 @@ on generated terrain, at a locked 30 fps (320x200, letterboxed).
 **Cornell box** (`app/cornell_demo.py`): a progressive path tracer, 240x240,
 one sample per pixel per pass (0.73 s), refining on screen from noise to a
 clean image in a minute or two. The asm kernel uses the RP2350's FPU and is
-bit-identical to the numpy reference in `tools/cornell_ref.py`. Button 1
-starts over.
+bit-identical to the numpy reference in `tools/cornell_ref.py`.
+
+| button | does |
+| --- | --- |
+| 1 | side walls white / back to red and green (starts over) |
+| 2 | start over from zero samples |
 
 ![Cornell box](docs/cornell.png)
+![Cornell box with white walls](docs/cornell_white.png)
 
 Pick the demo in `app/code.py` (`DEMO = "voxel_demo"` or `"cornell_demo"`).
 

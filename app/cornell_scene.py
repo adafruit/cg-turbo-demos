@@ -19,6 +19,10 @@ SPECULAR = 13
 BOUNCE = 14
 SCALE = 74
 EXPOSURE = 71
+# the side walls' color slots, and their words for each look
+WALL_SLOTS = (51, 52, 53, 54, 55, 56)
+COLORED_WALLS = (0x3F2147AE, 0x3D851EB8, 0x3D4CCCCD, 0x3E0F5C29, 0x3EE66666, 0x3DBA5E35)
+WHITE_WALLS = (0x3F39999A, 0x3F35C28F, 0x3F2E147B, 0x3F39999A, 0x3F35C28F, 0x3F2E147B)
 # the block's initial words (float constants as float32 bit patterns)
 BLOCK = (
     0x00000000, 0x00000000, 0x000000F0, 0x00000000, 0x00000000, 0x00000000,
