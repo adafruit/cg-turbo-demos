@@ -179,6 +179,11 @@ mirror sphere.
   `trace_row(block)`. `app/cornell.py` drives it a row at a time.
 - **0.73 s per pass** (~12.5 us, ~1900 cycles per pixel per sample): 64
   samples in under a minute, 256 in ~3 minutes.
+- Button 1 paints the side walls white (and back): `Cornell.set_white_walls()`
+  writes the white albedo's float bits into the red/green slots
+  (`cornell_scene.WALL_SLOTS`) and starts over; button 2 starts over. The
+  reference has the same switch (`use_white_walls()`, `--white-walls`); both
+  looks are bit-identical on the board.
 
 asm notes from this kernel:
 

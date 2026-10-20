@@ -104,6 +104,8 @@ FLOAT_BASE = 32
 SAVE_BASE = FLOAT_BASE + len(FLOATS)
 WORDS = SAVE_BASE + SAVE
 
+WALL_NAMES = ("RED_R", "RED_G", "RED_B", "GREEN_R", "GREEN_G", "GREEN_B")
+
 SEED_MUL = 0x9E3779B1
 PASS_MUL = 0x85EBCA6B
 SEED_XOR = 0x2545F491
@@ -119,7 +121,9 @@ def f32_bits(value):
     return struct.unpack("<I", struct.pack("<f", value))[0]
 
 
-def float_values():
+def float_values(white_walls=False):
+    """The float constants; white_walls paints the red and green walls white."""
+    red, green = (WHITE, WHITE) if white_walls else (RED, GREEN)
     (dx, dy, dz), dr, dalb = DIFFUSE_SPHERE
     (mx, my, mz), mr, malb = MIRROR_SPHERE
     return {
@@ -142,12 +146,12 @@ def float_values():
         "WHITE_R": WHITE[0],
         "WHITE_G": WHITE[1],
         "WHITE_B": WHITE[2],
-        "RED_R": RED[0],
-        "RED_G": RED[1],
-        "RED_B": RED[2],
-        "GREEN_R": GREEN[0],
-        "GREEN_G": GREEN[1],
-        "GREEN_B": GREEN[2],
+        "RED_R": red[0],
+        "RED_G": red[1],
+        "RED_B": red[2],
+        "GREEN_R": green[0],
+        "GREEN_G": green[1],
+        "GREEN_B": green[2],
         "D_X": dx,
         "D_Y": dy,
         "D_Z": dz,
@@ -193,6 +197,11 @@ def main():
         lines.append("%s = %d" % (name, slot(name)))
     lines.append("SCALE = %d" % slot("SCALE"))
     lines.append("EXPOSURE = %d" % slot("EXPOSURE"))
+    lines.append("# the side walls' color slots, and their words for each look")
+    lines.append("WALL_SLOTS = (%s)" % ", ".join(str(slot(n)) for n in WALL_NAMES))
+    for name, white in (("COLORED_WALLS", False), ("WHITE_WALLS", True)):
+        values = float_values(white)
+        lines.append("%s = (%s)" % (name, ", ".join("0x%08X" % f32_bits(values[n]) for n in WALL_NAMES)))
     lines.append("# the block's initial words (float constants as float32 bit patterns)")
     lines.append("BLOCK = (")
     words = block_words()

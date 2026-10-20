@@ -30,6 +30,15 @@ class Cornell:
         top = (display.HEIGHT - scene.SIZE) // 2
         self.out_address = mem.address(screen.screen) + (top * display.WIDTH + left) * 2
         self.passes = 0
+        self.white_walls = False
+
+    def set_white_walls(self, white):
+        """White side walls, or the classic red and green; starts over."""
+        words = scene.WHITE_WALLS if white else scene.COLORED_WALLS
+        for slot, word in zip(scene.WALL_SLOTS, words):
+            self.block[slot] = word
+        self.white_walls = white
+        self.reset()
 
     def reset(self):
         zeros = bytes(scene.SIZE * 12)

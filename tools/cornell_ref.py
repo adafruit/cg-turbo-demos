@@ -27,6 +27,11 @@ U = np.uint32
 np.seterr(all="ignore")
 
 C = {name: F(value) for name, value in scene.float_values().items()}
+
+
+def use_white_walls(white):
+    """Paint the side walls white (or back to red and green), as the board's button does."""
+    C.update({name: F(value) for name, value in scene.float_values(white).items()})
 ONE, TWO, ZERO, EPS, FAR = C["ONE"], C["TWO"], C["ZERO"], C["EPSILON"], C["FAR"]
 
 LEFT, RIGHT, FLOOR, CEILING, BACK, FRONT, DIFFUSE, MIRROR = range(8)
@@ -225,7 +230,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--passes", type=int, default=16)
     parser.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "cornell.png")
+    parser.add_argument("--white-walls", action="store_true")
     options = parser.parse_args()
+    use_white_walls(options.white_walls)
     accum = np.zeros((scene.SIZE, scene.SIZE, 3), dtype=F)
     rows = list(range(scene.SIZE))
     start = time.monotonic()
