@@ -191,7 +191,9 @@ mirror sphere.
   (`HIT_FACE`) for the normal, and the boxes shadow the light. 1.29 s per
   pass (each box test costs 6 divides, for camera and shadow rays alike)
   vs 0.74 s for the spheres. All modes are bit-identical to the reference.
-- Exposure 1.4 (was 1.0), to get closer to the classic reference rendering's
+- Exposure 1.8 (was 1.0): the white surfaces now nearly match the classic
+  reference rendering; its colored walls are darker and less saturated than
+  ours (it used measured spectra). 1.4 was tried first.
   brightness. 5 interactions per path instead of 3 was tried and dropped:
   only 3-4% brighter, for 35% longer passes (0.98 s spheres, 1.76 s boxes).
 - **Slice-assigning into a big bytearray is very slow in CircuitPython**:

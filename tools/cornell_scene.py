@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 SIZE = 240  # image width and height
 DEPTH = 3  # surface interactions per path
-EXPOSURE = 1.4
+EXPOSURE = 1.8
 
 CAMERA = (0.5, 0.5, -1.35)
 WHITE = (0.725, 0.71, 0.68)  # the classic Cornell box reflectances
