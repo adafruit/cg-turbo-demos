@@ -66,3 +66,8 @@ framebuffer benchmark).
 The desktop renderer runs the same Viper reference kernel as the board (with
 stand-in decorators in `tools/host/`), and board frames from the asm kernel
 are checked bit-for-bit against it.
+
+## license
+
+MIT: see [LICENSE](LICENSE). `tools/asm_to_viper.py` keeps its own MIT
+notice (Liz Clark for Adafruit Industries).
