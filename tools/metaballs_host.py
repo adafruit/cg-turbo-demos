@@ -29,12 +29,16 @@ def main():
     parser.add_argument("--time", type=float, default=0.0, help="animation time, seconds")
     parser.add_argument("--out", type=pathlib.Path, default=ROOT / "build" / "metaballs.png")
     parser.add_argument("--dump", type=pathlib.Path)
+    parser.add_argument("--balls", type=int, default=blobs.START)
+    parser.add_argument("--hue", type=int, default=0, help="presses of button 1")
     options = parser.parse_args()
     space = metafield.Metaballs(
         WIDTH, HEIGHT, str(ROOT / "assets" / "metaballs.bin"), buffer_view=lambda b: memoryview(b).cast("H")
     )
     space.kernel = metaballs.render  # the asm only runs on the board
-    space.set_balls(blobs.positions(options.time, WIDTH, HEIGHT))
+    for _ in range(options.hue):
+        space.next_hue()
+    space.set_balls(blobs.positions(options.time, WIDTH, HEIGHT, options.balls))
     back = bytearray(WIDTH * HEIGHT * 2)
     start = time.monotonic()
     space.render(memoryview(back).cast("H"))

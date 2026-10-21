@@ -41,10 +41,17 @@ bit-identical to the numpy reference in `tools/cornell_ref.py`.
 
 **Metaballs** (`app/metaballs_demo.py`): six 2D metaballs gliding on
 Lissajous paths, shaded as glossy 3D blobs that merge, over a glowing
-contoured field. 30 fps at 320x200; the asm frame kernel is bit-identical to
-the viper reference.
+contoured field. 30 fps at 320x200 with six balls; the asm frame kernel is
+bit-identical to the viper reference.
+
+| button | does |
+| --- | --- |
+| 1 | next hue (six) |
+| 2 | one ball fewer (down to 1) |
+| 3 | one ball more (up to 12) |
 
 ![Metaballs](docs/metaballs.png)
+![Metaballs in six hues](docs/metaballs_hues.png)
 
 Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"` or
 `"metaballs_demo"`).

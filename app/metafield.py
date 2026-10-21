@@ -20,9 +20,10 @@ class Metaballs:
     GLOW_SHIFT = 4
     SLOPE_SHIFT = 12
 
-    def __init__(self, width, height, tables_path, max_balls=8, scratch=None, buffer_view=None):
-        """tables_path: tools/make_metaballs_tables.py's output. scratch: SRAM
-        for the args and tables, which the kernel reads all the time."""
+    def __init__(self, width, height, tables_path, max_balls=12, scratch=None, buffer_view=None):
+        """tables_path: tools/make_metaballs_tables.py's output, one set of
+        tables per hue. scratch: SRAM for the args and the current hue's
+        tables, which the kernel reads all the time."""
         self.width = width
         self.height = height
         self.max_balls = max_balls
@@ -38,7 +39,12 @@ class Metaballs:
         else:
             args = array.array("i", bytes(4 * count))
             tables = bytearray(table_bytes)
-        tables[:] = load(tables_path)
+        self.hue_sets = load(tables_path)  # every hue's tables (PSRAM is fine)
+        self.hues = len(self.hue_sets) // table_bytes
+        self.table_bytes = table_bytes
+        self._tables = tables
+        self.hue = 0
+        tables[:] = memoryview(self.hue_sets)[:table_bytes]
         view = buffer_view or (lambda b: b)
         self.tables = view(tables)
         for name in ("args", "tables"):
@@ -54,6 +60,13 @@ class Metaballs:
         args[kernels.A_ROW_AT] = row_at
         self.args = args
         self.kernel = kernels.render_fast
+
+    def next_hue(self):
+        """Switch to the next hue's tables."""
+        self.hue = (self.hue + 1) % self.hues
+        start = self.hue * self.table_bytes
+        self._tables[:] = memoryview(self.hue_sets)[start : start + self.table_bytes]
+        return self.hue
 
     def set_balls(self, balls):
         """balls: (x, y, radius) in pixels, at most max_balls."""

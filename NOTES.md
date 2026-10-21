@@ -8,8 +8,9 @@
   (`Impossible-Playdate/app/gamepad_input.py`) has a working DualShock 4
   reader for this board.
 - A 160-column (2-pixel-wide) VoxelSpace mode, to see whether it reaches 60 fps.
-- Metaballs: buttons (number of balls, looks), and a push for 60 fps; a 3D
-  version on the Cornell box renderer.
+- Metaballs: a push for 60 fps (exact circle spans instead of bounding
+  boxes; 9-12 balls drop to 20 fps); a 3D version on the Cornell box
+  renderer.
 - Cornell box: more scene (glass sphere, the classic boxes), on-screen sample
   count, then a baked room with live objects.
 
@@ -254,3 +255,11 @@ indexes a 256-color glow palette with contour bands. All integer math.
 - The asm slots grew the args header from 8 to 32 words, and the tables and
   args quietly stopped fitting the 13 KB scratch (they fell back to PSRAM:
   34 ms frames). Display(scratch=14336) now; the warning caught it.
+- Buttons: 1 next hue, 2 one ball fewer, 3 one more (1 to 12; 6 at start).
+  `assets/metaballs.bin` now holds six table sets, the same look rotated in
+  hue about the gray axis (specular stays white); `next_hue()` copies one
+  set (9 KB) from PSRAM into the SRAM tables. Balls 7-12 follow paths made
+  the same way as the first six (`blobs.PATHS`).
+- Frame time by balls: 1: 8.5 ms, 3: 14.9, 6: 20.0, 9: 27.1, 12: 32.7 ms
+  (60 fps for 1-2, 30 for 3-11, 20 for 12). A 12-ball frame in a rotated hue
+  is bit-identical to the reference.

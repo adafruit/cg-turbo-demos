@@ -1,4 +1,7 @@
-"""2D metaballs: shaded blobs that merge, over a glowing field."""
+"""2D metaballs: shaded blobs that merge, over a glowing field.
+
+Button 1 cycles the hue, button 2 takes a ball away, button 3 adds one.
+"""
 
 import gc
 
@@ -12,21 +15,36 @@ screen = display.Display(scratch=14336)
 # pylint: disable=wrong-import-position,wrong-import-order
 import time
 
+import board
+import keypad
+
 import blobs
 import metafield
 
 REPORT_SECONDS = 2
 
 space = metafield.Metaballs(display.WIDTH, display.BACK_HEIGHT, "/metaballs.bin", scratch=screen.scratch)
+buttons = keypad.Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
+count = blobs.START
 gc.collect()
-print("metaballs: %d balls, free heap %d" % (len(blobs.PATHS), gc.mem_free()))
+print("metaballs: %d balls (1 to %d), %d hues, free heap %d" % (count, blobs.MAX, space.hues, gc.mem_free()))
 
 start = time.monotonic()
 frames = 0
 render_ns = 0
 report_at = time.monotonic_ns() + REPORT_SECONDS * 1_000_000_000
 while True:
-    space.set_balls(blobs.positions(time.monotonic() - start, display.WIDTH, display.BACK_HEIGHT))
+    event = buttons.events.get()
+    if event and event.pressed:
+        if event.key_number == 0:
+            print("hue", space.next_hue())
+        elif event.key_number == 1:
+            count = max(1, count - 1)
+            print("balls", count)
+        else:
+            count = min(blobs.MAX, count + 1)
+            print("balls", count)
+    space.set_balls(blobs.positions(time.monotonic() - start, display.WIDTH, display.BACK_HEIGHT, count))
     t0 = time.monotonic_ns()
     space.render(screen.back)
     t1 = time.monotonic_ns()
