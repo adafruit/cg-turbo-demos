@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The teapot's texture: assets/teapot_texture.bin, 256 x 256 little-endian
+"""The teapot's texture: assets/teapot_texture.bin, 512 x 512 little-endian
 rgb565, rows top to bottom.
 
     python3 tools/make_teapot_texture.py [grid.png]

@@ -74,7 +74,7 @@ class MeshView:
 
     def __init__(self, model_paths, luts_path, scratch, texture_paths=()):
         """scratch: SRAM (see scratch_bytes()) for the hot buffers.
-        texture_paths: per model, its texture (256 x 256 rgb565) or None."""
+        texture_paths: per model, its texture (512 x 512 rgb565) or None."""
         import mem  # pylint: disable=import-outside-toplevel
 
         self.models = [Model(p) for p in model_paths]

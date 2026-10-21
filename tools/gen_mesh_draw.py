@@ -495,7 +495,7 @@ def textured(a):
     uv_slots, n_slots = ("T_UV", "T_UV_Y", "T_UV_X"), ("T_N", "T_N_Y", "T_N_X")
     for k in range(2):  # s, t
         linear(a, lambda k=k: a("ldrh(r4, [r6, %d])" % (2 * k), "ldrh(r5, [r6, %d])" % (4 + 2 * k), "ldrh(r3, [r6, %d])" % (8 + 2 * k)),
-               15, k == 0, uv_slots)
+               16, k == 0, uv_slots)
     for k, offset in enumerate((6, 8)):  # normal x, y
         def load(offset=offset):
             a.ld("r3", "VC"), a("ldrh(r3, [r3, %d])" % offset)
@@ -551,8 +551,8 @@ def textured(a):
     # table, lr the run's end
     a("movwt(r3, %d)" % SPREAD, "movw(r4, %d)" % WHITE, "push({r7})")
     a("label(paint_tex)")
-    # texel at t * 256 + s
-    a("lsr(r5, r0, 24)", "lsl(r6, r0, 16)", "lsr(r6, r6, 24)", "lsl(r6, r6, 8)", "add(r5, r5, r6)")
+    # texel at t * 512 + s
+    a("lsr(r5, r0, 23)", "lsl(r6, r0, 16)", "lsr(r6, r6, 23)", "lsl(r6, r6, 9)", "add(r5, r5, r6)")
     a("lsl(r5, r5, 1)", "mov(r6, r11)", "add(r5, r5, r6)", "ldrh(r5, [r5, 0])")
     # light at iy * 64 + ix
     a("lsr(r6, r1, 26)", "lsl(r7, r1, 16)", "lsr(r7, r7, 26)", "lsl(r7, r7, 6)", "add(r6, r6, r7)")
