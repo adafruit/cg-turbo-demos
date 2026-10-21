@@ -19,6 +19,16 @@ counterclockwise seen from outside. File format (little-endian):
   triangles x u16 edge masks for the quad wireframe (bit 0 a-b, 1 b-c,
       2 c-a; 0 for the diagonal of a quad), apart from the indices so the
       other modes read only 6 bytes a triangle
+  if the header's last u16 is 1 (the teapot): triangles x 6 u16 texture
+      coordinates, s and t of each corner in quarter texels of a 128 x 128
+      texture (TEXTURE): per corner, so a patch seam can carry two
+
+The teapot's texture layout is injective (every texel on at most one place
+on the surface), after the University of Utah's teapot page: the body, rim
+and bottom unwrap around the axis into the texture's bottom half (s around,
+t down the profile, wrapping at s = 1); the lid, seen from above, is a disk
+in the top left quarter; the handle and the spout, tubes, are strips in the
+top right (s along, t around).
 """
 
 import argparse
@@ -64,10 +74,13 @@ def bernstein(t):
 
 
 def teapot(segments):
+    """(positions, triangles, parts, uvs): uvs per triangle corner (texture
+    s, t in 0..1)."""
     text = fetch(TEAPOT_URL, DOWNLOADS / "teapot" / "TeapotGeometry.js").read_text()
     patches = np.array(js_numbers(text, "teapotPatches"), dtype=int).reshape(-1, 4, 4)
     control = np.array(js_numbers(text, "teapotVertices")).reshape(-1, 3)
-    positions, triangles, parts = [], [], []
+    layout = Layout(control[patches])
+    positions, triangles, parts, uvs = [], [], [], []
     for index, patch in enumerate(patches):
         # the spout and handle meet the body: smaller triangles there sort
         # better back to front
@@ -75,29 +88,91 @@ def teapot(segments):
         t = np.linspace(0, 1, n_seg + 1)
         p = control[patch]  # [r][c] -> xyz
         base = len(positions)
+        here = []
         for u in t:
             for v in t:
                 positions.append(np.einsum("r,c,rcx->x", bernstein(u), bernstein(v), p))
+                here.append(layout.uv(index, u, v))
         n = n_seg + 1
         for i in range(n_seg):
             for j in range(n_seg):
-                a, b = base + i * n + j, base + i * n + j + 1
-                c, d = base + (i + 1) * n + j, base + (i + 1) * n + j + 1
-                triangles += [(a, c, b), (b, c, d)]
-                parts += [PART[index]] * 2
+                a, b = i * n + j, i * n + j + 1
+                c, d = (i + 1) * n + j, (i + 1) * n + j + 1
+                for corners in ((a, c, b), (b, c, d)):
+                    triangles.append([base + k for k in corners])
+                    uvs.append([here[k] for k in corners])
+                    parts.append(PART[index])
     positions = np.array(positions)[:, [0, 2, 1]] * [1, 1, -1]  # z up -> y up, keeping handedness
-    return positions, np.array(triangles), np.array(parts)
+    return positions, np.array(triangles), np.array(parts), np.array(uvs)
 
 
 FINE = 2  # the spout's and handle's subdivision, times the rest's
 # three.js's patch order: rim 4, body 8, handle 4, spout 4, lid 8, bottom 4
 PART = ["rim"] * 4 + ["body"] * 8 + ["handle"] * 4 + ["spout"] * 4 + ["lid"] * 8 + ["bottom"] * 4
+TEXTURE = 128  # texels square
+INSET = 0.5 / TEXTURE  # half a texel: the regions' texels never meet
+# the profiles, as (patch, its u direction along the chain): rows of four
+# patches around the axis (three.js's z up)
+STRIP = ((0, 1), (4, 1), (8, 1), (28, -1))  # rim, body upper, lower, bottom to the center
+LID = ((20, 1), (24, 1))  # knob from the top center, then the lid out to its edge
+# tubes: two patches lengthwise, each a pair side by side around
+HANDLE = (12, 14)
+SPOUT = (16, 18)
+
+
+class Layout:
+    """The injective texture layout, from the patches' parameters: s, t
+    (0..1, t down the image) of patch index at (u, v)."""
+
+    def __init__(self, control):
+        self.control = control  # [patch][r][c] -> xyz (z up)
+        self.place = {}
+        for chain in (STRIP, LID, HANDLE, SPOUT):
+            pairs = chain if chain in (STRIP, LID) else tuple((p, 1) for p in chain)
+            lengths = [self.length(p) for p, _ in pairs]
+            at = np.concatenate([[0], np.cumsum(lengths)]) / sum(lengths)
+            for k, (first, sign) in enumerate(pairs):
+                tube = chain in (HANDLE, SPOUT)
+                for q in range(2 if tube else 4):  # the patches around (or side by side)
+                    self.place[first + q] = (chain, at[k], at[k + 1], sign, q)
+
+    def point(self, index, u, v):
+        return np.einsum("r,c,rcx->x", bernstein(u), bernstein(v), self.control[index])
+
+    def length(self, index, samples=64):
+        """Along u, at the middle of v."""
+        p = np.array([self.point(index, u, 0.5) for u in np.linspace(0, 1, samples)])
+        return np.linalg.norm(np.diff(p, axis=0), axis=1).sum()
+
+    def around(self, index, v):
+        """Angle about the axis as a fraction of a turn, continuous across the
+        patch (its edge at u = 1 is off the axis)."""
+        def turn(v):
+            x, y, _ = self.point(index, 1.0, v)
+            return np.arctan2(y, x) / (2 * np.pi)
+
+        middle = turn(0.5) % 1
+        return 1 - (middle + (turn(v) - middle + 0.5) % 1 - 0.5)  # seen from outside, s runs left to right
+
+    def uv(self, index, u, v):
+        chain, lo, hi, sign, q = self.place[index]
+        along = lo + (hi - lo) * (u if sign > 0 else 1 - u)
+        if chain is STRIP:
+            return self.around(index, v), 0.5 + INSET + along * (0.5 - 2 * INSET)
+        if chain is LID:
+            angle = 2 * np.pi * self.around(index, v)
+            radius = along * (0.25 - INSET)
+            return 0.25 + radius * np.cos(angle), 0.25 - radius * np.sin(angle)
+        around = (q + v) / 2  # the second patch of each pair continues the first
+        top = 0.0 if chain is HANDLE else 0.25
+        return 0.5 + INSET + along * (0.5 - 2 * INSET), top + INSET + around * (0.25 - 2 * INSET)
 
 
 def trim_inside_body(positions, triangles, parts):
-    """Drop the spout's and handle's triangles inside the body: the original
-    data runs them into it, and drawing back to front can't sort surfaces
-    that cut through each other (dark jagged patches at the spout's base).
+    """Which triangles to keep: all but the spout's and handle's inside the
+    body. The original data runs them into it, and drawing back to front
+    can't sort surfaces that cut through each other (dark jagged patches at
+    the spout's base).
     The body is a surface of revolution about y: inside means nearer the axis
     than the body's radius at that height."""
     body = positions[np.unique(triangles[parts == "body"])]
@@ -107,7 +182,7 @@ def trim_inside_body(positions, triangles, parts):
     inside = np.hypot(center[:, 0], center[:, 2]) < np.interp(center[:, 1], heights, radius) - 1e-3
     drop = np.isin(parts, ("spout", "handle")) & inside
     print("  teapot: %d spout and handle triangles inside the body dropped" % drop.sum())
-    return triangles[~drop], parts[~drop]
+    return ~drop
 
 
 def bunny():
@@ -178,7 +253,9 @@ def orient(positions, triangles):
     return positions, triangles
 
 
-def finish(positions, triangles):
+def finish(positions, triangles, uvs=None):
+    """(positions, normals, face normals, triangles, uvs), centered and scaled;
+    triangles without area dropped (and their uvs, if any)."""
     lo, hi = positions.min(axis=0), positions.max(axis=0)
     positions = positions - (lo + hi) / 2
     positions /= np.linalg.norm(positions, axis=1).max()
@@ -187,13 +264,15 @@ def finish(positions, triangles):
     area = np.linalg.norm(cross, axis=1)
     keep = area > 1e-9
     triangles, cross, area = triangles[keep], cross[keep], area[keep]
+    if uvs is not None:
+        uvs = uvs[keep]
     face_normals = cross / area[:, None]
     normals = np.zeros_like(positions)
     for k in range(3):
         np.add.at(normals, triangles[:, k], cross)  # area-weighted
     used = np.linalg.norm(normals, axis=1) > 0
     normals[used] /= np.linalg.norm(normals[used], axis=1)[:, None]
-    return positions, normals, face_normals, triangles
+    return positions, normals, face_normals, triangles, uvs
 
 
 def focal(positions):
@@ -247,14 +326,14 @@ def quad_edges(positions, triangles, face_normals):
     return masks
 
 
-def write(path, positions, normals, face_normals, triangles):
+def write(path, positions, normals, face_normals, triangles, uvs):
     f = focal(positions)
     masks = quad_edges(positions, triangles, face_normals)
-    header = np.array([len(positions), len(triangles), f, 0], dtype="<u2").tobytes()
-    data = header + b"".join(
-        a.astype(t).tobytes()
-        for a, t in ((positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"), (masks, "<u2"))
-    )
+    header = np.array([len(positions), len(triangles), f, 0 if uvs is None else 1], dtype="<u2").tobytes()
+    blocks = [(positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"), (masks, "<u2")]
+    if uvs is not None:
+        blocks.append((np.round(uvs * 4 * TEXTURE), "<u2"))  # quarter texels
+    data = header + b"".join(a.astype(t).tobytes() for a, t in blocks)
     path.write_bytes(data)
     print(
         "wrote %s: %d vertices, %d triangles, focal %d, %d bytes"
@@ -266,11 +345,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--segments", type=int, default=6, help="teapot patch subdivision")
     options = parser.parse_args()
-    positions, triangles, parts = teapot(options.segments)
-    positions, triangles, parts = weld(positions, triangles, parts=parts)
-    triangles, parts = trim_inside_body(positions, triangles, parts)
-    positions, triangles = orient(positions, triangles)
-    write(ROOT / "assets" / "teapot.bin", *finish(positions, triangles))
+    positions, triangles, parts, uvs = teapot(options.segments)
+    positions, triangles, kept = weld(positions, triangles, parts=np.arange(len(triangles)))
+    parts, uvs = parts[kept], uvs[kept]
+    keep = trim_inside_body(positions, triangles, parts)
+    triangles, uvs = triangles[keep], uvs[keep]
+    positions, oriented = orient(positions, triangles)
+    flipped = oriented[:, 1] != triangles[:, 1]  # orient swaps corners b and c
+    uvs[flipped] = uvs[flipped][:, [0, 2, 1]]
+    write(ROOT / "assets" / "teapot.bin", *finish(positions, oriented, uvs))
     positions, triangles = orient(*bunny())
     write(ROOT / "assets" / "bunny.bin", *finish(positions, triangles))
 

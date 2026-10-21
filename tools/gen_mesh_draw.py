@@ -16,6 +16,13 @@ n_sum * inv directly (n_sum is linear
 in x and y, so the product is too, exactly, in wrapping 32-bit arithmetic),
 where the reference multiplies per pixel; the values it shifts down are the
 same.
+
+Textured triangles (mode 4) work out each row's run instead of seeking it:
+along a row each edge function is e + k d, so it holds (>= 0) from
+ceil(-e / d) on (d > 0) or up to floor(e / -d) (d < 0), exactly, and the
+run is the pixels all three hold for: the reference's pixels. Then it paints
+the run with nothing else to test: two packed registers hold s, t and the
+normal (see src/mesh.py), stepped per pixel, and per row in slots.
 """
 
 import pathlib
@@ -30,6 +37,7 @@ VERT_BYTES = 2 * consts["VERT"]
 TRI_BYTES = 2 * consts["TRI"]
 TABLE = consts["TABLE"]
 BUCKETS = consts["BUCKETS"]
+CULLED = 0xFFFF  # sort's mark for a back face (buckets are below 256)
 
 # slots reused once their first values are consumed (see draw's setup)
 ALIAS = {
@@ -46,7 +54,20 @@ ALIAS = {
     "PY_TEMP": "D_BX",
     "PX_ROW_STEP": "D_CX",
     "PY_ROW_STEP": "D_CY",
+    # textured: packed values at the row's left edge, their steps down and
+    # across, the e steps across; slots the sort, the clear or the setup are
+    # done with (every triangle's clip reads D_WIDTH and D_HEIGHT)
+    "T_UV": "D_AY",
+    "T_N": "D_BX",
+    "T_UV_Y": "D_BY",
+    "T_N_Y": "D_CX",
+    "T_UV_X": "D_CY",
+    "T_N_X": "D_COUNTS",
+    "T_E0_X": "D_DEPTH_MIN",
+    "T_E1_X": "D_DEPTH_SHIFT",
 }
+SPREAD = 0x07E0F81F  # src/mesh.py's
+WHITE = 0x0841
 
 
 class Asm:
@@ -97,17 +118,18 @@ class Asm:
 
 
 def sort_asm():
+    """The reference's two passes, but the first keeps each triangle's bucket
+    (CULLED for back faces) in the back buffer, which draw clears next, so the
+    second reads it instead of working it out again."""
     a = Asm()
     a.entry()
     # clear BUCKETS + 1 counts
     a.ld("r0", "D_COUNTS")
     a("mov(r1, 0)", "movw(r2, %d)" % (BUCKETS + 1))
     a("label(clear)", "str(r1, [r0, 0])", "add(r0, 4)", "sub(r2, r2, 1)", "bgt(clear)")
-    a("mov(r0, 0)", "mov(r12, r0)")  # r12: pass
-    a("label(pass_start)")
     a("mov(r0, 0)", "mov(r11, r0)")  # r11: t
     a.ld("r0", "D_TRIS")
-    a("cmp(r0, 0)", "ble_w(pass_end)")
+    a("cmp(r0, 0)", "ble_w(counted)")
     a("label(triangle)")
     a("mov(r0, r11)")
     a.record("r6", "r0", "r1")
@@ -126,7 +148,9 @@ def sort_asm():
     a("ldrh(r2, [r5, 0])", "ldrh(r6, [r3, 0])", "sub(r2, r2, r6)")  # cx - ax
     a("mul(r1, r2)")
     a("sub(r0, r0, r1)")
-    a("ble_w(next_triangle)")
+    a("bgt(front)")
+    a("movw(r0, %d)" % CULLED, "b(keep_bucket)")
+    a("label(front)")
     # bucket = clamp((za + zb + zc - min) >> shift), far first
     a("ldrh(r0, [r3, 4])", "ldrh(r1, [r4, 4])", "add(r0, r0, r1)", "ldrh(r1, [r5, 4])", "add(r0, r0, r1)")
     a.ld("r1", "D_DEPTH_MIN")
@@ -136,22 +160,17 @@ def sort_asm():
     a("bpl(not_low)", "mov(r0, 0)", "label(not_low)")
     a("cmp(r0, %d)" % (BUCKETS - 1), "ble(not_high)", "mov(r0, %d)" % (BUCKETS - 1), "label(not_high)")
     a("mov(r1, %d)" % (BUCKETS - 1), "sub(r0, r1, r0)")
-    a("lsl(r0, r0, 2)")
-    a.ld("r1", "D_COUNTS")
-    a("add(r0, r0, r1)")  # &counts[bucket]
-    a("mov(r1, r12)", "cmp(r1, 0)", "bne(place)")
-    a("ldr(r1, [r0, 4])", "add(r1, 1)", "str(r1, [r0, 4])", "b(next_triangle)")
-    a("label(place)")
-    a("ldr(r1, [r0, 0])", "add(r2, r1, 1)", "str(r2, [r0, 0])")
-    a("lsl(r1, r1, 1)")
-    a.ld("r2", "D_ORDER")
-    a("add(r1, r1, r2)", "mov(r2, r11)", "strh(r2, [r1, 0])")
-    a("label(next_triangle)")
+    a("lsl(r1, r0, 2)")
+    a.ld("r2", "D_COUNTS")
+    a("add(r1, r1, r2)")  # &counts[bucket]
+    a("ldr(r2, [r1, 4])", "add(r2, 1)", "str(r2, [r1, 4])")
+    a("label(keep_bucket)")
+    a.ld("r1", "D_BACK")
+    a("mov(r2, r11)", "lsl(r2, r2, 1)", "add(r1, r1, r2)", "strh(r0, [r1, 0])")
     a("mov(r0, r11)", "add(r0, 1)", "mov(r11, r0)")
     a.ld("r1", "D_TRIS")
     a("cmp(r0, r1)", "blt_w(triangle)")
-    a("label(pass_end)")
-    a("mov(r0, r12)", "cmp(r0, 0)", "bne_w(sorted)")
+    a("label(counted)")
     # prefix sums
     a.ld("r0", "D_COUNTS")
     a("movw(r2, %d)" % BUCKETS)
@@ -159,7 +178,17 @@ def sort_asm():
     a("add(r0, 4)", "sub(r2, r2, 1)", "bgt(prefix)")
     a("ldr(r1, [r0, 0])")
     a.st("r1", "D_VISIBLE")
-    a("mov(r0, 1)", "mov(r12, r0)", "b(pass_start)")
+    # place: r0 bucket, r1 scratch, r2 order, r3 counts, r4 buckets kept, r5 t, r6 tris
+    a.ld("r6", "D_TRIS")
+    a("cmp(r6, 0)", "ble(sorted)")
+    a.ld("r2", "D_ORDER"), a.ld("r3", "D_COUNTS"), a.ld("r4", "D_BACK")
+    a("mov(r5, 0)")
+    a("label(place)")
+    a("ldrh(r0, [r4, 0])", "lsr(r1, r0, 8)", "bne(placed)")  # CULLED
+    a("lsl(r0, r0, 2)", "add(r0, r0, r3)", "ldr(r1, [r0, 0])", "add(r1, 1)", "str(r1, [r0, 0])", "sub(r1, 1)")
+    a("lsl(r1, r1, 1)", "add(r1, r1, r2)", "strh(r5, [r1, 0])")
+    a("label(placed)")
+    a("add(r4, 2)", "add(r5, 1)", "cmp(r5, r6)", "blt(place)")
     a("label(sorted)")
     a.leave()
     return a.lines
@@ -214,7 +243,8 @@ def draw_asm():
             a.ld("r2", other)
             a("cmp(r2, r0)", "bge(%s)" % m1, "mov(r0, r2)", "label(%s)" % m1)
             a("cmp(r2, r1)", "ble(%s)" % m2, "mov(r1, r2)", "label(%s)" % m2)
-        a("asr(r0, r0, 4)", "asr(r1, r1, 4)")
+        # the first and last pixel centers (16 k + 8) inside
+        a("add(r0, 7)", "asr(r0, r0, 4)", "sub(r1, 8)", "asr(r1, r1, 4)")
         ok1, ok2 = a.new("lo_ok"), a.new("hi_ok")
         a("cmp(r0, 0)", "bge(%s)" % ok1, "mov(r0, 0)", "label(%s)" % ok1)
         a.ld("r2", limit)
@@ -248,6 +278,7 @@ def draw_asm():
         a("sub(r3, r3, r5)")
         a.st("r3", e)
     a.ld("r0", "D_MODE")
+    a("cmp(r0, 4)", "beq_w(textured)")
     a("cmp(r0, 2)", "bne_w(flat)")
     # interpolated normals: inv = (1 << 22) // area; for each of x and y,
     #   P0 = (e0 * (na - nc) + e1 * (nb - nc) + area * nc) * inv
@@ -358,6 +389,8 @@ def draw_asm():
     a("bgt_w(rows_flat)")
     a("b(next_triangle)")
 
+    textured(a)
+
     # ---- wireframe: Bresenham between pixel centers, as mesh.draw does.
     # r0 x0, r1 y0, r2 err, r3 r4 scratch, r5 sx, r6 sy; r8 x1, r9 y1, r10 dx, r11 dy
     a("label(wireframe)")
@@ -420,6 +453,130 @@ def draw_asm():
     a("label(done)")
     a.leave()
     return a.lines
+
+
+def linear(a, load, shift, first, slots):
+    """One interpolated value, Q = (qc << 22) + (e0 (qa - qc) + e1 (qb - qc)) inv:
+    load() puts qa, qb, qc in r4, r5, r3. Q at the box's first pixel and its
+    steps down and across, each >> shift, go into slots (T_UV, T_UV_Y,
+    T_UV_X, or T_N's): the high halves if first, else added as the low.
+    Uses r0, r1, r3-r5."""
+    load()
+    a("sub(r4, r4, r3)", "sub(r5, r5, r3)", "lsl(r3, r3, 22)")
+    for (e0, e1), slot in zip((("D_E0", "D_E1"), ("E0_ROW_STEP", "E1_ROW_STEP"), (None, None)), slots):
+        if e0 is None:
+            a("mov(r0, r8)", "mul(r0, r4)", "mov(r1, r9)", "mul(r1, r5)", "add(r0, r0, r1)")
+        else:
+            a.ld("r0", e0), a("mul(r0, r4)")
+            a.ld("r1", e1), a("mul(r1, r5)", "add(r0, r0, r1)")
+        a.ld("r1", "INV"), a("mul(r0, r1)")
+        if slot == slots[0]:
+            a("add(r0, r0, r3)")
+        a("asr(r0, r0, %d)" % shift)
+        if first:
+            a("lsl(r0, r0, 16)")
+        else:
+            a.ld("r1", slot), a("add(r0, r0, r1)")
+        a.st("r0", slot)
+
+
+def textured(a):
+    """Mode 4: texel times its light's m / 32, plus its highlight."""
+    a("label(textured)")
+    a("movwt(r0, %d)" % (1 << 22), "mov(r1, r10)", "sdiv(r0, r0, r1)")
+    a.st("r0", "INV")
+    # r6: the triangle's UV values, tri + 8 * tris + 12 * t
+    a.ld("r0", "D_ORDER")
+    a.ld("r1", "D_K")
+    a("lsl(r1, r1, 1)", "add(r0, r0, r1)", "ldrh(r0, [r0, 0])")
+    a("lsl(r1, r0, 3)", "lsl(r0, r0, 2)", "add(r1, r1, r0)")
+    a.ld("r0", "D_TRIS"), a("lsl(r0, r0, 3)", "add(r1, r1, r0)")
+    a.ld("r0", "D_TRI"), a("add(r6, r1, r0)")
+    uv_slots, n_slots = ("T_UV", "T_UV_Y", "T_UV_X"), ("T_N", "T_N_Y", "T_N_X")
+    for k in range(2):  # s, t
+        linear(a, lambda k=k: a("ldrh(r4, [r6, %d])" % (2 * k), "ldrh(r5, [r6, %d])" % (4 + 2 * k), "ldrh(r3, [r6, %d])" % (8 + 2 * k)),
+               15, k == 0, uv_slots)
+    for k, offset in enumerate((6, 8)):  # normal x, y
+        def load(offset=offset):
+            a.ld("r3", "VC"), a("ldrh(r3, [r3, %d])" % offset)
+            a.ld("r4", "VA"), a("ldrh(r4, [r4, %d])" % offset)
+            a.ld("r5", "VB"), a("ldrh(r5, [r5, %d])" % offset)
+        linear(a, load, 13, k == 0, n_slots)
+    a("mov(r0, r8)")
+    a.st("r0", "T_E0_X")
+    a("mov(r0, r9)")
+    a.st("r0", "T_E1_X")
+    # for the whole triangle: r8 r9 the packed x steps, r11 the texture, r12 the table
+    a.ld("r0", "T_UV_X"), a("mov(r8, r0)")
+    a.ld("r0", "T_N_X"), a("mov(r9, r0)")
+    a.ld("r0", "D_TEXTURE"), a("mov(r11, r0)")
+    a.ld("r0", "D_TABLE"), a("mov(r12, r0)")
+
+    # the row's run: r2 first, r3 last pixel (from the box's left edge);
+    # r0 e0, r1 e1, r5 r6 their steps, r10 area; r4 r7 scratch
+    a("label(rows_tex)")
+    a.ld("r0", "D_E0"), a.ld("r1", "D_E1"), a.ld("r5", "T_E0_X"), a.ld("r6", "T_E1_X")
+    a("mov(r2, 0)")
+    a.ld("r3", "ROW_PIXELS"), a("sub(r3, r3, 1)", "push({r7})")
+
+    def edge(e, d, scratch):
+        positive, negative, done = a.new("rising"), a.new("falling"), a.new("edge_done")
+        a("cmp(%s, 0)" % d, "bgt(%s)" % positive, "blt(%s)" % negative)
+        a("cmp(%s, 0)" % e, "blt_w(no_run_tex)", "b(%s)" % done)  # level
+        a("label(%s)" % positive)
+        a("cmp(%s, 0)" % e, "bge(%s)" % done)
+        a("sub(%s, %s, %s)" % (scratch, d, e), "sub(%s, %s, 1)" % (scratch, scratch))  # ceil(-e / d)
+        a("sdiv(%s, %s, %s)" % (scratch, scratch, d))
+        a("cmp(%s, r2)" % scratch, "ble(%s)" % done, "mov(r2, %s)" % scratch, "b(%s)" % done)
+        a("label(%s)" % negative)
+        a("cmp(%s, 0)" % e, "blt_w(no_run_tex)")
+        a("neg(%s, %s)" % (scratch, d), "sdiv(%s, %s, %s)" % (scratch, e, scratch))  # floor(e / -d)
+        a("cmp(%s, r3)" % scratch, "bge(%s)" % done, "mov(r3, %s)" % scratch)
+        a("label(%s)" % done)
+
+    edge("r0", "r5", "r4")
+    edge("r1", "r6", "r4")
+    a("mov(r4, r10)", "sub(r4, r4, r0)", "sub(r4, r4, r1)", "add(r7, r5, r6)", "neg(r7, r7)")  # e2, its step
+    edge("r4", "r7", "r0")
+    a("pop({r7})")
+    a("cmp(r2, r3)", "bgt_w(row_end_tex)")
+    # r2 the run's first pixel, lr its end; packed values there
+    a.ld("r4", "D_ROW")
+    a("lsl(r3, r3, 1)", "add(r3, 2)", "add(r3, r3, r4)", "mov(lr, r3)")
+    a("mov(r3, r2)", "lsl(r2, r2, 1)", "add(r2, r2, r4)")
+    a.ld("r0", "T_UV"), a("mov(r5, r8)", "mul(r5, r3)", "add(r0, r0, r5)")
+    a.ld("r1", "T_N"), a("mov(r6, r9)", "mul(r6, r3)", "add(r1, r1, r6)")
+    # painting: r0 packed s, t; r1 packed normal; r2 pixel; r3 SPREAD; r4
+    # WHITE; r5-r7 scratch; r8 r9 their x steps, r11 the texture, r12 the
+    # table, lr the run's end
+    a("movwt(r3, %d)" % SPREAD, "movw(r4, %d)" % WHITE, "push({r7})")
+    a("label(paint_tex)")
+    # texel at t * 128 + s
+    a("lsr(r5, r0, 25)", "lsl(r6, r0, 16)", "lsr(r6, r6, 25)", "lsl(r6, r6, 7)", "add(r5, r5, r6)")
+    a("lsl(r5, r5, 1)", "mov(r6, r11)", "add(r5, r5, r6)", "ldrh(r5, [r5, 0])")
+    # light at iy * 64 + ix
+    a("lsr(r6, r1, 26)", "lsl(r7, r1, 16)", "lsr(r7, r7, 26)", "lsl(r7, r7, 6)", "add(r6, r6, r7)")
+    a("lsl(r6, r6, 1)", "mov(r7, r12)", "add(r6, r6, r7)", "ldrh(r6, [r6, 0])")
+    # spread, scale by m / 32, fold, add h * WHITE
+    a("lsl(r7, r5, 16)", "orr(r5, r7)", "and_(r5, r3)")
+    a("lsl(r7, r6, 24)", "lsr(r7, r7, 24)", "mul(r5, r7)", "lsr(r5, r5, 5)", "and_(r5, r3)")
+    a("lsr(r7, r5, 16)", "orr(r5, r7)")
+    a("lsr(r6, r6, 8)", "mul(r6, r4)", "add(r5, r5, r6)", "strh(r5, [r2, 0])")
+    a("mov(r5, r8)", "add(r0, r0, r5)", "mov(r5, r9)", "add(r1, r1, r5)")
+    a("add(r2, 2)", "mov(r5, lr)", "cmp(r2, r5)", "blt(paint_tex)")
+    a("pop({r7})", "b(row_end_tex)")
+    a("label(no_run_tex)")
+    a("pop({r7})")
+    a("label(row_end_tex)")
+    for value, step in (("D_E0", "E0_ROW_STEP"), ("D_E1", "E1_ROW_STEP"), ("T_UV", "T_UV_Y"), ("T_N", "T_N_Y")):
+        a.ld("r0", value), a.ld("r1", step), a("add(r0, r0, r1)")
+        a.st("r0", value)
+    a.ld("r0", "D_ROW"), a.ld("r1", "D_WIDTH"), a("lsl(r1, r1, 1)", "add(r0, r0, r1)")
+    a.st("r0", "D_ROW")
+    a.ld("r0", "ROWS"), a("sub(r0, r0, 1)")
+    a.st("r0", "ROWS")
+    a("bgt_w(rows_tex)")
+    a("b(next_triangle)")
 
 
 HEAD = '''"""Generated by tools/gen_mesh_draw.py: edit that.

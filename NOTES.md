@@ -300,7 +300,7 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
 - `tools/mesh_ref.py`: numpy float32 transform (bit-exact spec) + the viper
   sort/draw on the desktop. All 8 model/mode frames bit-identical on the board.
 - Memory: a 240x200 back buffer (96 KB, `Display(back_width=240)`, copied
-  into the screen's middle by `mem.copy_rows`) leaves SRAM for geo (vertex
+  into the screen's middle by `mem_asm.copy_rows_asm`) leaves SRAM for geo (vertex
   values, drawing order, packed face normals: 34 KB for the bunny), the args,
   the current lighting table (8 KB) and the transform block: 44 KB scratch.
 - Frames, render only: teapot 14-23 ms, bunny 17-22 ms; whole frames hold
@@ -365,3 +365,63 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
 - The 3D models demo shows the current shader in its top border (`shader:
   quad / tri / Lambert / Phong / Blinn`, `meshview.LABELS`), redrawn on each
   button 2 press: `Display.fill()` clears the strip, then `text()`.
+
+## Texture mapping the teapot (step 9)
+
+Button 2's sixth mode, teapot only: the University of Utah teapot page's UV
+test grid (https://graphics.cs.utah.edu/teapot/; A1 to H8, 1024 x 1024)
+scaled to 128 x 128 rgb565 (`tools/make_teapot_texture.py`, grays stretched
+to 70..235; `assets/teapot_texture.bin`, 32 KB in PSRAM), on an injective
+layout, lit by per-pixel Phong. The bunny has no texture coordinates and
+shows Phong instead; back on the teapot, texture mode returns.
+
+- Layout (`make_meshes.Layout`), from the patches' own parameters: body, rim
+  and bottom unwrap around the axis into the bottom half (s around, wrapping
+  at 1; t down the profile, by arc length); the lid is a disk in the top left
+  quarter (radius by arc length from the knob's top); handle and spout are
+  strips in the top right (along by arc length, around by the patch pair).
+  Each region keeps half a texel clear of the others. UVs are per triangle
+  corner (u16 quarter texels, after the edge masks; header word 3 = 1), so a
+  seam carries two values without splitting vertices. The geometry is byte
+  for byte what it was.
+- Lighting: a 4th table per model, entries m | h << 8: texel channels times
+  m / 32 (diffuse, ambient 0.12), plus h * 0x0841 (white, h / 31: the Phong
+  highlight), m capped so no channel carries into the next. rgb565 spread to
+  `(c | c << 16) & 0x07E0F81F` gives each channel room to multiply.
+- Interpolation: s, t and the normal as Q = (qc << 22) + (e0 dqa + e1 dqb)
+  inv in wrapping 32-bit arithmetic, packed two per word (high << 16 + low:
+  s, t >> 15, i.e. 1/512 texel; normals >> 13), stepped across and down from
+  the box's corner. One register carries two values, which is what lets the
+  paint loop fit: 8 low registers (both packed values, the pixel, the spread
+  mask, 0x0841, 3 scratch) and r8-r12, lr (both x steps, texture, table, end).
+  Overflow wraps the same everywhere: the host reference stores through
+  `args[A_WRAP]` (`mesh_ref.Words` wraps to int32 as the board does), and
+  everything after packing only reads low bits.
+- Speed, teapot at 150 MHz: the first asm was bit-exact but 33.6 ms (20 fps).
+  Profiling: texel fetches from PSRAM cost only 0.8 ms (the cache copes), the
+  paint loop 4.6 ms; the rest was per row and per triangle. Triangles average
+  7 pixels: 8,092 box rows per frame, 4,276 with a run, 61,269 box pixels,
+  13,982 painted. Fixes, each still bit-exact:
+  - sort: pass 1 keeps each triangle's bucket in the back buffer (cleared by
+    draw next anyway), so pass 2 doesn't recompute areas: 6.7 -> 4.05 ms,
+    every mode.
+  - packed values step down the rows themselves (not four exact values
+    packed per row): reference changed to match.
+  - textured rows compute their run instead of seeking it: along a row an
+    edge function is e + k d, so it holds from ceil(-e / d) (d > 0) or up to
+    floor(e / -d) (d < 0); three sdivs replace stepping across the box.
+  - boxes snap to the first and last pixel centers ((min + 7) >> 4, (max - 8)
+    >> 4), dropping empty rows and columns; filled modes keep their exact
+    pixels (only texture's packed starting point moves).
+  - the flip's copy of the 240-wide back buffer into the screen was a viper
+    loop taking 5.85 ms; `mem_asm.copy_rows_asm`, 4 words a turn: 0.69 ms.
+  Now: teapot texture render 26.2 ms, Phong 20.7; the demo holds 30 fps in
+  texture mode. Bit-identical to the reference at 12 angles (Phong and
+  texture) and in every model/mode frame, the viper reference on the board
+  included.
+- The inline assembler only reaches r8-r12 and lr with `mov`: `add(r0, r8)`
+  ("unsupported Thumb instruction 'add' with 2 arguments") and `cmp(r0, r9)`
+  ("expects at most r7") don't assemble.
+- A probe that re-ran `sort_asm` on a block after `draw_asm` crashed the
+  board: textured draw reuses sort's slots (D_COUNTS and others) for its own
+  values. render_fast fills them fresh every frame, so the demo is fine.

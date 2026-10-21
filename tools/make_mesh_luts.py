@@ -3,11 +3,14 @@
 
     python3 tools/make_mesh_luts.py
 
-For each model (MODELS, in order), three 64 x 64 little-endian rgb565
-tables, back to back: Lambert (diffuse only), Phong (specular from the
+For each model (MODELS, in order), four 64 x 64 little-endian u16 tables,
+back to back: rgb565 for Lambert (diffuse only), Phong (specular from the
 reflected light, (R.V)^n) and Blinn (specular from the half vector, (N.H)^n),
 with the same light, material and exponent, so Phong and Blinn differ only
-in the specular model. The light is white; each model has its own color. Each is indexed by a
+in the specular model; then Phong for a textured surface, as m | h << 8: the
+texel scaled by m / 32 (diffuse), plus h * 0x0841 (white, h / 31 of full:
+the highlight), m small enough that no channel overflows (src/mesh.py). The
+light is white; each model has its own color. Each is indexed by a
 view-space normal: [iy * 64 + ix], nx = (2 ix + 1 - 64) / 63, ny likewise
 (y up), facing the camera. The light is directional and the view nearly
 orthographic, so a pixel's lighting depends only on its normal: these tables
@@ -29,12 +32,21 @@ AMBIENT = 0.12
 LIGHT = np.array([-0.45, 0.55, -0.70])  # toward the light: upper left, the camera's side
 SPECULAR = 0.75
 SHININESS = 24
-MODES = ("lambert", "phong", "blinn")
+MODES = ("lambert", "phong", "blinn", "texture")
 
 
 def rgb565(c):
     c = np.clip(np.asarray(c) * 255 + 0.5, 0, 255).astype(np.uint32)
     return ((c[..., 0] >> 3) << 11) | ((c[..., 1] >> 2) << 5) | (c[..., 2] >> 3)
+
+
+def textured(diffuse, specular):
+    """m | h << 8: out = texel * m / 32 + white * h / 31, per channel at most
+    full (red: floor(31 m / 32) + h <= 31; green and blue follow)."""
+    h = np.round(31 * np.clip(specular, 0, 1)).astype(np.uint32)
+    room = (32 * (31 - h)) // 31
+    m = np.minimum(np.round(32 * diffuse * (1 - h / 31)).astype(np.uint32), room)
+    return m | (h << 8)
 
 
 def table(mode, color_of_surface):
@@ -47,6 +59,9 @@ def table(mode, color_of_surface):
     view = np.array([0.0, 0.0, -1.0])  # from the surface to the camera
     diffuse = np.clip(n @ light, 0, 1)
     color = color_of_surface * (AMBIENT + (1 - AMBIENT) * diffuse[..., None])
+    if mode == "texture":
+        reflected = 2 * (n @ light)[..., None] * n - light
+        return textured(AMBIENT + (1 - AMBIENT) * diffuse, SPECULAR * np.clip(reflected @ view, 0, 1) ** SHININESS)
     if mode == "phong":
         reflected = 2 * (n @ light)[..., None] * n - light
         color = color + SPECULAR * (np.clip(reflected @ view, 0, 1) ** SHININESS)[..., None]
