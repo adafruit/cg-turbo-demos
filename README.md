@@ -76,14 +76,11 @@ a cool glazed clay and the bunny light gray (`tools/make_mesh_luts.py`).
 
 ![The teapot and the bunny in the four modes](docs/meshes.png)
 
-Run `python3 tools/make_meshes.py` before deploying: it downloads the models
-and writes `assets/teapot.bin` (committed) and `assets/bunny.bin` (not
-committed). The teapot is Martin Newell's 1975 Bezier patch data, taken from
-three.js (MIT). The bunny is from the
-[Stanford 3D Scanning Repository](https://graphics.stanford.edu/data/3Dscanrep/)
-(Stanford University Computer Graphics Laboratory), which asks for this
-acknowledgment and for permission for commercial use, so it is downloaded at
-build time rather than redistributed here.
+The teapot is Martin Newell's 1975 Bezier patch data (via three.js); the
+bunny is from the
+[Stanford 3D Scanning Repository](https://graphics.stanford.edu/data/3Dscanrep/).
+`tools/make_meshes.py` downloads both and rebuilds `assets/teapot.bin` and
+`assets/bunny.bin`.
 
 To skip the menu while developing, set `DEMO` in `app/code.py` to a demo's
 module (`"voxel_demo"`, `"cornell_demo"`, `"metaballs_demo"` or

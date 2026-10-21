@@ -282,7 +282,7 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
 - `tools/make_meshes.py`: downloads both, tessellates the teapot, centers and
   scales to the unit sphere, smooth vertex normals and face normals, and
   orients windings (the bunny's are consistent where its mesh is manifold).
-  `assets/bunny.bin` is built, not committed (Stanford's terms).
+  Both outputs are committed.
 - `tools/make_mesh_luts.py`: 64x64 lighting tables indexed by the view-space
   normal (x, y; z toward the camera), for Lambert, Phong ((R.V)^n) and Blinn
   ((N.H)^n), same light and exponent. With a directional light and a nearly

@@ -8,5 +8,3 @@ __pycache__/
 .DS_Store
 # reference images (not ours to publish)
 reference/
-# made at build time from the Stanford scan: see tools/make_meshes.py
-assets/bunny.bin

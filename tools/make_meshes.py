@@ -7,9 +7,7 @@ Downloads the sources into build/downloads (once):
   the Utah teapot: Martin Newell's 32 Bezier patches, from three.js's
       TeapotGeometry.js (MIT), tessellated here
   the Stanford bunny: bun_zipper_res3.ply from the Stanford 3D Scanning
-      Repository (https://graphics.stanford.edu/data/3Dscanrep/). Stanford
-      asks for acknowledgment and allows research use; assets/bunny.bin is
-      therefore made at build time and not committed.
+      Repository (https://graphics.stanford.edu/data/3Dscanrep/)
 
 Each model is centered, scaled to fit the unit sphere, y up, triangles wound
 counterclockwise seen from outside. File format (little-endian):
