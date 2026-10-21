@@ -356,3 +356,9 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   menu. The menu remembers the last demo started in `microcontroller.nvm[0]`.
 - Checked by doing what button 1 does from the REPL for each demo: all four
   start at their usual speeds, with no PSRAM warnings.
+- Button help in every demo: `Display.text()` / `lines()` draw the built-in
+  6 x 12 terminalio font straight onto the screen, once at startup, in the
+  border around the demo's image (above/below the 320x200 and 240x200
+  images, beside the 240x240 Cornell box). Frames only copy into the image,
+  so the text stays and costs nothing per frame. The 3D models' window
+  background is now black, like the border, so the window doesn't show.

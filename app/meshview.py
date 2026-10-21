@@ -27,7 +27,7 @@ KERNEL_MODES = (3, 0, 1, 2, 2)  # mesh.draw's mode for each
 TABLES = (None, None, 0, 1, 2)  # which of a model's lighting tables (assets/mesh_luts.bin) each uses
 SHADED_TABLES = 3  # lighting tables per model in mesh_luts.bin
 WIRES = (0xFFFF, 0x07E8, 0, 0, 0)  # wireframe colors: quads white, triangles green
-BACKGROUND = 0x0841
+BACKGROUND = 0x0000  # black, like the screen around the window
 
 
 def rotation(angle, tilt=TILT):

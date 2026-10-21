@@ -12,6 +12,9 @@ import display
 # args and lighting tables (14 KB).
 gc.collect()
 screen = display.Display(scratch=14336)
+screen.text(4, 4, "Metaballs", display.TITLE)
+screen.text(250, 4, "reset: menu")
+screen.text(4, 224, "B1 hue  B1 twice: glow  B2 fewer  B3 more")
 
 # pylint: disable=wrong-import-position,wrong-import-order
 import time

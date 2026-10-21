@@ -12,8 +12,9 @@ Output is 320x240 RGB565, pixel-doubled to 640x480 HDMI by `picodvi`.
 ## demos
 
 The board boots into a menu of the demos: button 3 moves up, button 2 down,
-button 1 starts the one highlighted. Press reset to come back to the menu
-(it remembers the last demo started).
+button 1 starts the one highlighted. Each demo shows its buttons in the
+border around its image. Press reset to come back to the menu (it remembers
+the last demo started).
 
 ![The boot menu](docs/menu.png)
 

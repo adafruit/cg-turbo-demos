@@ -11,12 +11,15 @@ import array
 import board
 import displayio
 import picodvi
+import terminalio
 
 import mem
 
 WIDTH = 320
 HEIGHT = 240
 BACK_HEIGHT = 200
+TITLE = 0xFF08  # rgb565: the demo's name, button names
+HINT = 0x9CF3  # what the buttons do
 
 
 class Display:
@@ -60,6 +63,7 @@ class Display:
         row = bytes(WIDTH * 2)
         for y in range(HEIGHT):
             self.screen[y * WIDTH * 2 : (y + 1) * WIDTH * 2] = row
+        self.pixels = memoryview(self.framebuffer).cast("H")
 
     def flip(self):
         """Show the back buffer: starts at vblank and outruns the beam, so no tearing."""
@@ -69,3 +73,30 @@ class Display:
             self.letterbox[:] = self.back
         else:
             mem.copy_rows(self.window, self.back, BACK_HEIGHT, self.layout)
+
+    def text(self, x, y, string, color=HINT):
+        """Draw string with the built-in 6 x 12 font straight onto the screen,
+        top left at (x, y). For the borders around a demo's image: frames only
+        copy into the image, so text there stays put and costs nothing per
+        frame."""
+        font = terminalio.FONT
+        pixels = self.pixels
+        for i, character in enumerate(string):
+            glyph = font.get_glyph(ord(character))
+            if glyph is None:
+                continue
+            bitmap = glyph.bitmap
+            per_row = bitmap.width // glyph.width
+            tx = (glyph.tile_index % per_row) * glyph.width
+            ty = (glyph.tile_index // per_row) * glyph.height
+            left = x + i * glyph.width
+            for gy in range(glyph.height):
+                at = (y + gy) * WIDTH + left
+                for gx in range(glyph.width):
+                    if bitmap[tx + gx, ty + gy]:
+                        pixels[at + gx] = color
+
+    def lines(self, x, y, strings, colors=None, spacing=12):
+        """Several lines of text, one under the other."""
+        for i, string in enumerate(strings):
+            self.text(x, y + i * spacing, string, colors[i] if colors else HINT)

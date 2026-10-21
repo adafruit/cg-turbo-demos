@@ -13,6 +13,12 @@ import display
 # to the screen, a row at a time.
 gc.collect()
 screen = display.Display(scratch=1024, back=False)
+T, H = display.TITLE, display.HINT
+screen.lines(2, 4, ("Cor-", "nell", "Box"), (T, T, T))
+screen.lines(2, 70, ("B1", "white", "walls"), (T, H, H))
+screen.lines(2, 120, ("B2", "start", "over"), (T, H, H))
+screen.lines(2, 170, ("B3", "boxes/", "balls"), (T, H, H))
+screen.lines(282, 4, ("reset", "menu"))
 
 # pylint: disable=wrong-import-position,wrong-import-order
 import time
