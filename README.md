@@ -64,7 +64,7 @@ Phong and Blinn light every pixel from its interpolated normal.
 | button | does |
 | --- | --- |
 | 1 | teapot / bunny |
-| 2 | wireframe -> Lambert (flat) -> Phong -> Blinn |
+| 2 | triangle wireframe -> quad wireframe -> Lambert (flat) -> Phong -> Blinn |
 | 3 | pause / resume the spin |
 
 ![The teapot and the bunny in the four modes](docs/meshes.png)

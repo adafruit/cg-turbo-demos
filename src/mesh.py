@@ -9,7 +9,8 @@ depth, normal x, y offset to 0..128; the projection keeps them all
 positive), then the drawing order from args[A_ORDER_AT], then per triangle
 its face normal packed as x << 8 | y (offset likewise) from args[A_FACES_AT]
 (the transform writes them, for flat shading). tri (u16, PSRAM is fine): per
-triangle TRI vertex indices. Front faces have a positive signed area on the
+triangle TRI vertex indices, then per triangle an edge mask for the quad
+wireframe (bit e for edge e: a-b, b-c, c-a), from TRI * args[A_TRIS]. Front faces have a positive signed area on the
 screen (y down); back faces are skipped.
 """
 
@@ -26,7 +27,8 @@ A_ORDER_AT = const(4)  # geo offset of the drawing order
 A_COUNTS_AT = const(5)  # args offset of BUCKETS + 1 counts
 A_DEPTH_MIN = const(6)  # smallest depth sum of a triangle's 3 vertices
 A_DEPTH_SHIFT = const(7)  # (depth sum - min) >> shift = bucket
-A_MODE = const(8)  # 0 wireframe, 1 flat (Lambert), 2 interpolated normals (Phong, Blinn)
+A_MODE = const(8)  # 0 wireframe, 1 flat (Lambert), 2 interpolated normals (Phong, Blinn),
+# 3 quad wireframe (only the edges in each triangle's mask)
 A_BACKGROUND = const(9)
 A_WIRE = const(10)  # wireframe color
 A_VISIBLE = const(11)  # out: front-facing triangles, in drawing order
@@ -171,10 +173,16 @@ def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
         by = geo[b + V_Y]
         cx = geo[c + V_X]
         cy = geo[c + V_Y]
-        if mode == 0:
-            # wireframe: the three edges, Bresenham between pixel centers
+        if mode == 0 or mode == 3:
+            # wireframe: the three edges (or the quad's), Bresenham between pixel centers
+            edges = 7
+            if mode == 3:
+                edges = tri[TRI * args[A_TRIS] + t]
             e = 0
             while e < 3:
+                if ((edges >> e) & 1) == 0:
+                    e += 1
+                    continue
                 if e == 0:
                     x0 = ax >> 4
                     y0 = ay >> 4
