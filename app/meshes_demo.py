@@ -35,6 +35,16 @@ gc.collect()
 print("meshes: free heap %d" % gc.mem_free())
 NAMES = ("teapot", "bunny")
 
+
+def show_shader():
+    """The current shader's name in the top border, after the title."""
+    screen.fill(70, 4, 160, 12)
+    screen.text(70, 4, "shader:")
+    screen.text(118, 4, meshview.LABELS[viewer.mode], display.TITLE)
+
+
+show_shader()
+
 angle = 0.0
 spinning = True
 last = time.monotonic()
@@ -49,6 +59,7 @@ while True:
             print("model", NAMES[viewer.model])
         elif event.key_number == 1:
             viewer.show_mode((viewer.mode + 1) % len(meshview.MODES))
+            show_shader()
             print("mode", meshview.MODES[viewer.mode])
         else:
             spinning = not spinning
