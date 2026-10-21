@@ -12,6 +12,9 @@ import display
 # about 136 KB of the internal SRAM, and imported modules take SRAM too.
 gc.collect()
 screen = display.Display(scratch=8192)
+screen.text(4, 4, "VoxelSpace", display.TITLE)
+screen.text(250, 4, "reset: menu")
+screen.text(4, 224, "B1 color/height/shaded  B2 height  B3 fog")
 
 # pylint: disable=wrong-import-position,wrong-import-order
 import time

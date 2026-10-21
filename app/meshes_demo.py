@@ -14,6 +14,9 @@ import display
 # for the transformed vertices, drawing order and lighting table.
 gc.collect()
 screen = display.Display(scratch=46080, back_width=240)
+screen.text(4, 4, "3D Models", display.TITLE)
+screen.text(250, 4, "reset: menu")
+screen.text(4, 224, "B1 model  B2 render mode  B3 pause spin")
 
 # pylint: disable=wrong-import-position,wrong-import-order
 import time
