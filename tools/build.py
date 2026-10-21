@@ -2,7 +2,7 @@
 """Compile src/*.py to build/lib/*.mpy for the Fruit Jam, and optionally deploy.
 
     python3 tools/build.py            # compile only
-    python3 tools/build.py --deploy   # compile, then copy lib/*.mpy, app/* and assets/*.bin to CIRCUITPY
+    python3 tools/build.py --deploy   # compile, then copy lib/*.mpy, app/* and assets/*.bin, *.bmp to CIRCUITPY
 
 The first deploy saves the board's existing code.py to backup/ before
 replacing it. Source .py files are never copied to the board, so they can't
@@ -70,7 +70,7 @@ def deploy(mount, outputs):
     lib.mkdir(exist_ok=True)
     for output in outputs:
         copy_if_changed(output, lib / output.name, "lib/")
-    for path in sorted(ASSETS.glob("*.bin")):
+    for path in sorted(ASSETS.glob("*.bin")) + sorted(ASSETS.glob("*.bmp")):
         copy_if_changed(path, mount / path.name, "/")
     # code.py last, so the auto-reload it triggers sees the new modules
     for path in sorted(APP.glob("*.py"), key=lambda p: p.name == "code.py"):

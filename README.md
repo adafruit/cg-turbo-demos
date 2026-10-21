@@ -11,6 +11,12 @@ Output is 320x240 RGB565, pixel-doubled to 640x480 HDMI by `picodvi`.
 
 ## demos
 
+The board boots into a menu of the demos: button 3 moves up, button 2 down,
+button 1 starts the one highlighted. Press reset to come back to the menu
+(it remembers the last demo started).
+
+![The boot menu](docs/menu.png)
+
 **VoxelSpace** (`app/voxel_demo.py`): a Comanche-style voxel terrain
 fly-over after [s-macke/VoxelSpace](https://github.com/s-macke/VoxelSpace),
 on generated terrain, at a locked 30 fps (320x200, letterboxed).
@@ -79,8 +85,10 @@ three.js (MIT). The bunny is from the
 acknowledgment and for permission for commercial use, so it is downloaded at
 build time rather than redistributed here.
 
-Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"`,
-`"metaballs_demo"` or `"meshes_demo"`).
+To skip the menu while developing, set `DEMO` in `app/code.py` to a demo's
+module (`"voxel_demo"`, `"cornell_demo"`, `"metaballs_demo"` or
+`"meshes_demo"`). The menu's thumbnails come from
+`python3 tools/make_menu_thumbs.py`.
 
 Coming: USB gamepad flying, and more Cornell box scenes. See
 [NOTES.md](NOTES.md) for the plan, every measurement, and what was learned

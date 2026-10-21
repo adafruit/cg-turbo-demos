@@ -340,3 +340,19 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   tables per model (48 KB) and the board copies in the one for the current
   model and mode. Wireframes: quads white, triangles green (`meshview.WIRES`).
   Button 2 order: quads (the start), triangles, Lambert, Phong, Blinn.
+
+## Boot menu (step 8)
+
+`app/menu.py`, run by `code.py`: the four demos with 80x50 thumbnails
+(`tools/make_menu_thumbs.py` renders them with each demo's desktop reference;
+`assets/menu_*.bmp`, deployed with the other assets), drawn with displayio,
+`terminalio.FONT` and adafruit_display_text. Button 3 up, 2 down, 1 starts.
+
+- A demo starts as a fresh run of its own file:
+  `supervisor.set_next_code_file("/x_demo.py")` then `supervisor.reload()`.
+  Importing it into the menu's session would leave the menu's objects on the
+  heap, and every demo needs to allocate its SRAM buffers first thing.
+  `set_next_code_file` lasts one run, so reset (or Ctrl-D) comes back to the
+  menu. The menu remembers the last demo started in `microcontroller.nvm[0]`.
+- Checked by doing what button 1 does from the REPL for each demo: all four
+  start at their usual speeds, with no PSRAM warnings.
