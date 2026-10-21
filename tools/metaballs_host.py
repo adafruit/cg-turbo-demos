@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--dump", type=pathlib.Path)
     parser.add_argument("--balls", type=int, default=blobs.START)
     parser.add_argument("--hue", type=int, default=0, help="presses of button 1")
+    parser.add_argument("--no-glow", action="store_true", help="a double click of button 1")
     options = parser.parse_args()
     space = metafield.Metaballs(
         WIDTH, HEIGHT, str(ROOT / "assets" / "metaballs.bin"), buffer_view=lambda b: memoryview(b).cast("H")
@@ -38,6 +39,7 @@ def main():
     space.kernel = metaballs.render  # the asm only runs on the board
     for _ in range(options.hue):
         space.next_hue()
+    space.show_glow(not options.no_glow)
     space.set_balls(blobs.positions(options.time, WIDTH, HEIGHT, options.balls))
     back = bytearray(WIDTH * HEIGHT * 2)
     start = time.monotonic()

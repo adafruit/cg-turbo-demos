@@ -1,6 +1,7 @@
 """2D metaballs: shaded blobs that merge, over a glowing field.
 
-Button 1 cycles the hue, button 2 takes a ball away, button 3 adds one.
+Button 1 cycles the hue (double-click it to turn the glow off or on),
+button 2 takes a ball away, button 3 adds one.
 """
 
 import gc
@@ -22,6 +23,7 @@ import blobs
 import metafield
 
 REPORT_SECONDS = 2
+DOUBLE_CLICK = 0.35  # seconds: a second press of button 1 within this is a double click
 
 space = metafield.Metaballs(display.WIDTH, display.BACK_HEIGHT, "/metaballs.bin", scratch=screen.scratch)
 buttons = keypad.Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
@@ -33,11 +35,22 @@ start = time.monotonic()
 frames = 0
 render_ns = 0
 report_at = time.monotonic_ns() + REPORT_SECONDS * 1_000_000_000
+# a press of button 1 waits here until it can't be the first half of a double click
+pending_click = None
 while True:
     event = buttons.events.get()
+    now = time.monotonic()
+    if pending_click is not None and now - pending_click >= DOUBLE_CLICK:
+        pending_click = None
+        print("hue", space.next_hue())
     if event and event.pressed:
         if event.key_number == 0:
-            print("hue", space.next_hue())
+            if pending_click is None:
+                pending_click = now
+            else:
+                pending_click = None
+                space.show_glow(not space.glow)
+                print("glow", "on" if space.glow else "off")
         elif event.key_number == 1:
             count = max(1, count - 1)
             print("balls", count)

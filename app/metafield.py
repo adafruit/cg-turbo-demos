@@ -44,6 +44,7 @@ class Metaballs:
         self.table_bytes = table_bytes
         self._tables = tables
         self.hue = 0
+        self.glow = True
         tables[:] = memoryview(self.hue_sets)[:table_bytes]
         view = buffer_view or (lambda b: b)
         self.tables = view(tables)
@@ -64,9 +65,22 @@ class Metaballs:
     def next_hue(self):
         """Switch to the next hue's tables."""
         self.hue = (self.hue + 1) % self.hues
+        self._load_tables()
+        return self.hue
+
+    def show_glow(self, on):
+        """The glow and its contour bands around the blobs, or a plain background."""
+        self.glow = on
+        self._load_tables()
+
+    def _load_tables(self):
         start = self.hue * self.table_bytes
         self._tables[:] = memoryview(self.hue_sets)[start : start + self.table_bytes]
-        return self.hue
+        if not self.glow:
+            # every glow color becomes the first one, the empty field's
+            colors = memoryview(self._tables).cast("H")
+            for i in range(1, kernels.GLOW):
+                colors[i] = colors[0]
 
     def set_balls(self, balls):
         """balls: (x, y, radius) in pixels, at most max_balls."""
