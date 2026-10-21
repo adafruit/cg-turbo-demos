@@ -434,10 +434,11 @@ shows Phong instead; back on the teapot, texture mode returns.
   8 bits of each packed half. The cell labels are legible now. Cost: teapot
   texture render 26.2 -> 27.9 ms (more PSRAM cache misses); the demo still
   holds 30 fps. Bit-identical in every model/mode frame and at 12 angles.
-- 512 x 512 (branch teapot-texture-512): corner UVs in 1/1024 of a side, so
+- 512 x 512, kept for the demo: corner UVs in 1/1024 of a side, so
   value << 22 wraps at a whole side (2^32) exactly where the texture
   repeats; s, t pack as >> 16; 9-bit texel indices. Bit-identical, but the
   512 KB texture misses the PSRAM cache more: render ~31 ms, the demo 29-30
   fps with occasional dropped frames. Texels are also smaller than pixels
-  on most of the body, so nearest sampling can shimmer: mipmaps (512 and
-  256, chosen per triangle by texels per pixel) would fix both.
+  on most of the body, so nearest sampling can shimmer. If it ever needs
+  to hold 30 fps: mipmaps (512 and 256, chosen per triangle by texels per
+  pixel) would fix both.
