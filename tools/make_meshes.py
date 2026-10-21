@@ -20,8 +20,9 @@ counterclockwise seen from outside. File format (little-endian):
       2 c-a; 0 for the diagonal of a quad), apart from the indices so the
       other modes read only 6 bytes a triangle
   if the header's last u16 is 1 (the teapot): triangles x 6 u16 texture
-      coordinates, s and t of each corner in quarter texels of a 128 x 128
-      texture (TEXTURE): per corner, so a patch seam can carry two
+      coordinates, s and t of each corner in 1/UV_UNITS of the texture's
+      side (half texels of the 256 x 256 texture): per corner, so a patch
+      seam can carry two
 
 The teapot's texture layout is injective (every texel on at most one place
 on the surface), after the University of Utah's teapot page: the body, rim
@@ -73,20 +74,25 @@ def bernstein(t):
     return np.array([s * s * s, 3 * t * s * s, 3 * t * t * s, t * t * t])
 
 
-def teapot(segments):
-    """(positions, triangles, parts, uvs): uvs per triangle corner (texture
-    s, t in 0..1)."""
+def teapot_patches():
+    """Newell's patches: [patch][r][c] -> xyz control points (z up)."""
     text = fetch(TEAPOT_URL, DOWNLOADS / "teapot" / "TeapotGeometry.js").read_text()
     patches = np.array(js_numbers(text, "teapotPatches"), dtype=int).reshape(-1, 4, 4)
     control = np.array(js_numbers(text, "teapotVertices")).reshape(-1, 3)
-    layout = Layout(control[patches])
+    return control[patches]
+
+
+def teapot(segments):
+    """(positions, triangles, parts, uvs): uvs per triangle corner (texture
+    s, t in 0..1)."""
+    patches = teapot_patches()
+    layout = Layout(patches)
     positions, triangles, parts, uvs = [], [], [], []
-    for index, patch in enumerate(patches):
+    for index, p in enumerate(patches):  # [r][c] -> xyz
         # the spout and handle meet the body: smaller triangles there sort
         # better back to front
         n_seg = segments * FINE if PART[index] in ("spout", "handle") else segments
         t = np.linspace(0, 1, n_seg + 1)
-        p = control[patch]  # [r][c] -> xyz
         base = len(positions)
         here = []
         for u in t:
@@ -109,7 +115,8 @@ def teapot(segments):
 FINE = 2  # the spout's and handle's subdivision, times the rest's
 # three.js's patch order: rim 4, body 8, handle 4, spout 4, lid 8, bottom 4
 PART = ["rim"] * 4 + ["body"] * 8 + ["handle"] * 4 + ["spout"] * 4 + ["lid"] * 8 + ["bottom"] * 4
-TEXTURE = 128  # texels square
+TEXTURE = 256  # texels square (tools/make_teapot_texture.py)
+UV_UNITS = 512  # stored texture coordinates per side: (UV_UNITS << 22) fits in 32 bits
 INSET = 0.5 / TEXTURE  # half a texel: the regions' texels never meet
 # the profiles, as (patch, its u direction along the chain): rows of four
 # patches around the axis (three.js's z up)
@@ -127,10 +134,12 @@ class Layout:
     def __init__(self, control):
         self.control = control  # [patch][r][c] -> xyz (z up)
         self.place = {}
+        self.splits = {}  # each chain's patch boundaries, 0..1 along it
         for chain in (STRIP, LID, HANDLE, SPOUT):
             pairs = chain if chain in (STRIP, LID) else tuple((p, 1) for p in chain)
             lengths = [self.length(p) for p, _ in pairs]
             at = np.concatenate([[0], np.cumsum(lengths)]) / sum(lengths)
+            self.splits[chain] = at
             for k, (first, sign) in enumerate(pairs):
                 tube = chain in (HANDLE, SPOUT)
                 for q in range(2 if tube else 4):  # the patches around (or side by side)
@@ -332,7 +341,7 @@ def write(path, positions, normals, face_normals, triangles, uvs):
     header = np.array([len(positions), len(triangles), f, 0 if uvs is None else 1], dtype="<u2").tobytes()
     blocks = [(positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"), (masks, "<u2")]
     if uvs is not None:
-        blocks.append((np.round(uvs * 4 * TEXTURE), "<u2"))  # quarter texels
+        blocks.append((np.round(uvs * UV_UNITS), "<u2"))
     data = header + b"".join(a.astype(t).tobytes() for a, t in blocks)
     path.write_bytes(data)
     print(

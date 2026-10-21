@@ -67,9 +67,10 @@ transform runs on the FPU, then back-face culling, a bucket sort back to front
 and an integer scanline fill, all in asm and bit-identical to the references.
 Phong and Blinn light every pixel from its interpolated normal. The teapot is
 a cool glazed clay and the bunny light gray (`tools/make_mesh_luts.py`).
-The teapot also wears a texture: a UV test grid on an injective layout (body
-around the bottom half; lid, handle and spout in the top half), Phong lit,
-with texture coordinates and normals interpolated per pixel.
+The teapot also wears a 256x256 texture: a UV test grid on an injective
+layout (body around the bottom half; lid, handle and spout in the top half),
+each part tinted as in the Utah teapot page's layout figure, Phong lit, with
+texture coordinates and normals interpolated per pixel.
 
 | button | does |
 | --- | --- |

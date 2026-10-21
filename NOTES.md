@@ -425,3 +425,12 @@ shows Phong instead; back on the teapot, texture mode returns.
 - A probe that re-ran `sort_asm` on a block after `draw_asm` crashed the
   board: textured draw reuses sort's slots (D_COUNTS and others) for its own
   values. render_fast fills them fresh every frame, so the demo is fine.
+- 256 x 256 and the page's colors: the texture is now 256 x 256 (128 KB in
+  PSRAM), and `make_teapot_texture` tints each part's region of the layout
+  with the colors of the Utah page's injective layout figure (body salmon,
+  handle green, knob yellow, lid peach, spout blue; grays 0.45..1 times the
+  color). Corner UVs are stored in 1/512 of the side whatever the size
+  (`make_meshes.UV_UNITS`), so (value << 22) still fits; texel indices take
+  8 bits of each packed half. The cell labels are legible now. Cost: teapot
+  texture render 26.2 -> 27.9 ms (more PSRAM cache misses); the demo still
+  holds 30 fps. Bit-identical in every model/mode frame and at 12 angles.
