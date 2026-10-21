@@ -3,10 +3,11 @@
 
     python3 tools/make_mesh_luts.py
 
-Three 64 x 64 little-endian rgb565 tables, back to back: Lambert (diffuse
-only), Phong (specular from the reflected light, (R.V)^n) and Blinn (specular
-from the half vector, (N.H)^n), with the same light, material and exponent,
-so Phong and Blinn differ only in the specular model. Each is indexed by a
+For each model (MODELS, in order), three 64 x 64 little-endian rgb565
+tables, back to back: Lambert (diffuse only), Phong (specular from the
+reflected light, (R.V)^n) and Blinn (specular from the half vector, (N.H)^n),
+with the same light, material and exponent, so Phong and Blinn differ only
+in the specular model. The light is white; each model has its own color. Each is indexed by a
 view-space normal: [iy * 64 + ix], nx = (2 ix + 1 - 64) / 63, ny likewise
 (y up), facing the camera. The light is directional and the view nearly
 orthographic, so a pixel's lighting depends only on its normal: these tables
@@ -19,7 +20,11 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-COLOR = np.array([0.80, 0.62, 0.45])  # glazed clay
+# each model's diffuse color (RGB, 0-1), in meshview's model order
+MODELS = (
+    ("teapot", np.array([0.80, 0.68, 0.57])),  # glazed clay, a little cooler
+    ("bunny", np.array([0.74, 0.74, 0.76])),  # light gray
+)
 AMBIENT = 0.12
 LIGHT = np.array([-0.45, 0.55, -0.70])  # toward the light: upper left, the camera's side
 SPECULAR = 0.75
@@ -32,7 +37,7 @@ def rgb565(c):
     return ((c[..., 0] >> 3) << 11) | ((c[..., 1] >> 2) << 5) | (c[..., 2] >> 3)
 
 
-def table(mode):
+def table(mode, color_of_surface):
     i = (np.arange(64) * 2 + 1 - 64) / 63  # meshview's NORMAL_SCALE
     nx, ny = np.meshgrid(i, i)
     nz = -np.sqrt(np.clip(1 - nx * nx - ny * ny, 0, 1))  # toward the camera, which looks along +z
@@ -41,7 +46,7 @@ def table(mode):
     light = LIGHT / np.linalg.norm(LIGHT)
     view = np.array([0.0, 0.0, -1.0])  # from the surface to the camera
     diffuse = np.clip(n @ light, 0, 1)
-    color = COLOR * (AMBIENT + (1 - AMBIENT) * diffuse[..., None])
+    color = color_of_surface * (AMBIENT + (1 - AMBIENT) * diffuse[..., None])
     if mode == "phong":
         reflected = 2 * (n @ light)[..., None] * n - light
         color = color + SPECULAR * (np.clip(reflected @ view, 0, 1) ** SHININESS)[..., None]
@@ -53,9 +58,9 @@ def table(mode):
 
 def main():
     out = ROOT / "assets" / "mesh_luts.bin"
-    data = b"".join(table(m).astype("<u2").tobytes() for m in MODES)
+    data = b"".join(table(mode, color).astype("<u2").tobytes() for _, color in MODELS for mode in MODES)
     out.write_bytes(data)
-    print("wrote", out.relative_to(ROOT), len(data), "bytes:", ", ".join(MODES))
+    print("wrote", out.relative_to(ROOT), len(data), "bytes:", ", ".join(name for name, _ in MODELS), "x", ", ".join(MODES))
 
 
 if __name__ == "__main__":

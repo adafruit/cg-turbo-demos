@@ -59,12 +59,13 @@ the Stanford bunny (3,851), spinning slowly and filling the window, at 30 fps
 in every mode. The
 transform runs on the FPU, then back-face culling, a bucket sort back to front
 and an integer scanline fill, all in asm and bit-identical to the references.
-Phong and Blinn light every pixel from its interpolated normal.
+Phong and Blinn light every pixel from its interpolated normal. The teapot is
+a cool glazed clay and the bunny light gray (`tools/make_mesh_luts.py`).
 
 | button | does |
 | --- | --- |
 | 1 | teapot / bunny |
-| 2 | triangle wireframe -> quad wireframe -> Lambert (flat) -> Phong -> Blinn |
+| 2 | quad wireframe (white, the start) -> triangle wireframe (green) -> Lambert (flat) -> Phong -> Blinn |
 | 3 | pause / resume the spin |
 
 ![The teapot and the bunny in the four modes](docs/meshes.png)

@@ -335,3 +335,8 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   file, not in the records: 8-byte records cost a third more PSRAM reads in
   every mode and teapot Phong fell to 24 fps; with 6-byte records again, all
   five modes hold 30 fps, all bit-identical.
+- Colors and order: each model has its own color (teapot a cooler glazed
+  clay, bunny light gray: `make_mesh_luts.MODELS`), so mesh_luts.bin holds 3
+  tables per model (48 KB) and the board copies in the one for the current
+  model and mode. Wireframes: quads white, triangles green (`meshview.WIRES`).
+  Button 2 order: quads (the start), triangles, Lambert, Phong, Blinn.
