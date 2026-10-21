@@ -2,15 +2,14 @@
 
 Button 3 moves up, button 2 down, button 1 starts the demo. A demo starts as
 a fresh run of its own file (supervisor.set_next_code_file and a reload), so
-it gets the clean heap its SRAM buffers need; reset comes back here. The menu
-remembers the last demo started (one byte of microcontroller.nvm).
+it gets the clean heap its SRAM buffers need; reset comes back here, with
+the first demo highlighted.
 """
 
 import board
 import displayio
 import framebufferio
 import keypad
-import microcontroller
 import picodvi
 import supervisor
 import terminalio
@@ -30,7 +29,6 @@ NAME = 0xFFFFFF
 NAME_SELECTED = 0xFFE040
 NOTE = 0x8090A0
 HIGHLIGHT = 0x203060
-LAST = 0  # microcontroller.nvm byte holding the last demo started
 
 displayio.release_displays()
 framebuffer = picodvi.Framebuffer(
@@ -65,7 +63,7 @@ for i, (name, note, _, thumbnail) in enumerate(DEMOS):
     root.append(label.Label(terminalio.FONT, text=note, color=NOTE, x=102, y=top + 36))
 display.root_group = root
 
-selected = microcontroller.nvm[LAST] if microcontroller.nvm[LAST] < len(DEMOS) else 0
+selected = 0
 
 
 def show(index):
@@ -87,8 +85,6 @@ while True:
         selected = (selected + 1) % len(DEMOS)
         show(selected)
     else:
-        if microcontroller.nvm[LAST] != selected:
-            microcontroller.nvm[LAST] = selected
         print("starting", DEMOS[selected][0])
         supervisor.set_next_code_file(DEMOS[selected][2])
         supervisor.reload()
