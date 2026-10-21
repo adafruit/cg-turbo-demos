@@ -54,8 +54,9 @@ bit-identical to the viper reference.
 ![Metaballs in six hues](docs/metaballs_hues.png)
 ![Metaballs without the glow](docs/metaballs_no_glow.png)
 
-**3D models** (`app/meshes_demo.py`): the Utah teapot (2,256 triangles) and
-the Stanford bunny (3,851), spinning slowly, at 30 fps in every mode. The
+**3D models** (`app/meshes_demo.py`): the Utah teapot (3,926 triangles) and
+the Stanford bunny (3,851), spinning slowly and filling the window, at 30 fps
+in every mode. The
 transform runs on the FPU, then back-face culling, a bucket sort back to front
 and an integer scanline fill, all in asm and bit-identical to the references.
 Phong and Blinn light every pixel from its interpolated normal.
@@ -64,6 +65,7 @@ Phong and Blinn light every pixel from its interpolated normal.
 | --- | --- |
 | 1 | teapot / bunny |
 | 2 | wireframe -> Lambert (flat) -> Phong -> Blinn |
+| 3 | pause / resume the spin |
 
 ![The teapot and the bunny in the four modes](docs/meshes.png)
 

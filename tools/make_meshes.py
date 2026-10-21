@@ -13,7 +13,9 @@ Downloads the sources into build/downloads (once):
 
 Each model is centered, scaled to fit the unit sphere, y up, triangles wound
 counterclockwise seen from outside. File format (little-endian):
-  u16 vertices, u16 triangles, u32 0
+  u16 vertices, u16 triangles, u16 focal length (pixels per unit at distance
+  1: as large as keeps the model inside the demo's window through a whole
+  turn), u16 0
   vertices x 3 f32 positions, vertices x 3 f32 normals (smooth),
   triangles x 3 f32 face normals, triangles x 3 u16 vertex indices
 """
@@ -24,9 +26,16 @@ import re
 import tarfile
 import urllib.request
 
+import sys
+
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path[:0] = [str(ROOT / "tools" / "host"), str(ROOT / "src"), str(ROOT / "app")]
+
+import meshview  # noqa: E402  (the demo's view: window, distance, tilt)
+
+MARGIN = 4  # pixels kept clear at the window's edges
 DOWNLOADS = ROOT / "build" / "downloads"
 TEAPOT_URL = "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/jsm/geometries/TeapotGeometry.js"
 BUNNY_URL = "http://graphics.stanford.edu/pub/3Dscanrep/bunny.tar.gz"
@@ -57,22 +66,47 @@ def teapot(segments):
     text = fetch(TEAPOT_URL, DOWNLOADS / "teapot" / "TeapotGeometry.js").read_text()
     patches = np.array(js_numbers(text, "teapotPatches"), dtype=int).reshape(-1, 4, 4)
     control = np.array(js_numbers(text, "teapotVertices")).reshape(-1, 3)
-    positions, triangles = [], []
-    t = np.linspace(0, 1, segments + 1)
-    for patch in patches:
+    positions, triangles, parts = [], [], []
+    for index, patch in enumerate(patches):
+        # the spout and handle meet the body: smaller triangles there sort
+        # better back to front
+        n_seg = segments * FINE if PART[index] in ("spout", "handle") else segments
+        t = np.linspace(0, 1, n_seg + 1)
         p = control[patch]  # [r][c] -> xyz
         base = len(positions)
         for u in t:
             for v in t:
                 positions.append(np.einsum("r,c,rcx->x", bernstein(u), bernstein(v), p))
-        n = segments + 1
-        for i in range(segments):
-            for j in range(segments):
+        n = n_seg + 1
+        for i in range(n_seg):
+            for j in range(n_seg):
                 a, b = base + i * n + j, base + i * n + j + 1
                 c, d = base + (i + 1) * n + j, base + (i + 1) * n + j + 1
                 triangles += [(a, c, b), (b, c, d)]
+                parts += [PART[index]] * 2
     positions = np.array(positions)[:, [0, 2, 1]] * [1, 1, -1]  # z up -> y up, keeping handedness
-    return positions, np.array(triangles)
+    return positions, np.array(triangles), np.array(parts)
+
+
+FINE = 2  # the spout's and handle's subdivision, times the rest's
+# three.js's patch order: rim 4, body 8, handle 4, spout 4, lid 8, bottom 4
+PART = ["rim"] * 4 + ["body"] * 8 + ["handle"] * 4 + ["spout"] * 4 + ["lid"] * 8 + ["bottom"] * 4
+
+
+def trim_inside_body(positions, triangles, parts):
+    """Drop the spout's and handle's triangles inside the body: the original
+    data runs them into it, and drawing back to front can't sort surfaces
+    that cut through each other (dark jagged patches at the spout's base).
+    The body is a surface of revolution about y: inside means nearer the axis
+    than the body's radius at that height."""
+    body = positions[np.unique(triangles[parts == "body"])]
+    heights = np.unique(np.round(body[:, 1], 6))
+    radius = np.array([np.hypot(body[:, 0], body[:, 2])[np.abs(body[:, 1] - h) < 1e-6].max() for h in heights])
+    center = positions[triangles].mean(axis=1)
+    inside = np.hypot(center[:, 0], center[:, 2]) < np.interp(center[:, 1], heights, radius) - 1e-3
+    drop = np.isin(parts, ("spout", "handle")) & inside
+    print("  teapot: %d spout and handle triangles inside the body dropped" % drop.sum())
+    return triangles[~drop], parts[~drop]
 
 
 def bunny():
@@ -87,7 +121,7 @@ def bunny():
     return positions, triangles
 
 
-def weld(positions, triangles, tolerance=1e-6):
+def weld(positions, triangles, tolerance=1e-6, parts=None):
     """Merge vertices at the same place (the teapot's patch seams), drop
     triangles that collapse."""
     keys = np.round(positions / tolerance).astype(np.int64)
@@ -95,6 +129,8 @@ def weld(positions, triangles, tolerance=1e-6):
     triangles = inverse.reshape(-1)[triangles]
     positions = positions[first]
     keep = (triangles[:, 0] != triangles[:, 1]) & (triangles[:, 1] != triangles[:, 2]) & (triangles[:, 0] != triangles[:, 2])
+    if parts is not None:
+        return positions, triangles[keep], parts[keep]
     return positions, triangles[keep]
 
 
@@ -159,20 +195,43 @@ def finish(positions, triangles):
     return positions, normals, face_normals, triangles
 
 
+def focal(positions):
+    """The largest focal length (pixels per unit at distance 1) that keeps
+    the model's projection inside the demo's window, with MARGIN, through a
+    whole turn of the spin."""
+    reach_x = reach_y = 0.0
+    for degrees in range(360):
+        m = np.array(meshview.rotation(np.radians(degrees))).reshape(3, 3)
+        r = positions @ m.T
+        z = r[:, 2] + meshview.DISTANCE
+        reach_x = max(reach_x, np.abs(r[:, 0] / z).max())
+        reach_y = max(reach_y, np.abs(r[:, 1] / z).max())
+    half_w = meshview.WIDTH / 2 - MARGIN
+    half_h = meshview.HEIGHT / 2 - MARGIN
+    return int(min(half_w / reach_x, half_h / reach_y))
+
+
 def write(path, positions, normals, face_normals, triangles):
-    header = np.array([len(positions), len(triangles), 0, 0], dtype="<u2").tobytes()
+    f = focal(positions)
+    header = np.array([len(positions), len(triangles), f, 0], dtype="<u2").tobytes()
     data = header + b"".join(
         a.astype(t).tobytes() for a, t in ((positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"))
     )
     path.write_bytes(data)
-    print("wrote %s: %d vertices, %d triangles, %d bytes" % (path.relative_to(ROOT), len(positions), len(triangles), len(data)))
+    print(
+        "wrote %s: %d vertices, %d triangles, focal %d, %d bytes"
+        % (path.relative_to(ROOT), len(positions), len(triangles), f, len(data))
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--segments", type=int, default=6, help="teapot patch subdivision")
     options = parser.parse_args()
-    positions, triangles = orient(*weld(*teapot(options.segments)))
+    positions, triangles, parts = teapot(options.segments)
+    positions, triangles, parts = weld(positions, triangles, parts=parts)
+    triangles, parts = trim_inside_body(positions, triangles, parts)
+    positions, triangles = orient(positions, triangles)
     write(ROOT / "assets" / "teapot.bin", *finish(positions, triangles))
     positions, triangles = orient(*bunny())
     write(ROOT / "assets" / "bunny.bin", *finish(positions, triangles))

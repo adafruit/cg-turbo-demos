@@ -9,7 +9,10 @@ src/mesh.py's D_* slots), filled by mesh.render_fast().
 
 Filled triangles step their edge functions across the bounding box; the third
 edge function is area - e0 - e1 (an exact identity), which saves a register.
-For interpolated normals the asm steps n_sum * inv directly (n_sum is linear
+Each row skips to the triangle's one run of pixels, paints it and stops.
+Normal indices never pass TABLE - 1 (normals are scaled by 63), so the asm
+leaves out the reference's clamps. For interpolated normals the asm steps
+n_sum * inv directly (n_sum is linear
 in x and y, so the product is too, exactly, in wrapping 32-bit arithmetic),
 where the reference multiplies per pixel; the values it shifts down are the
 same.
@@ -278,15 +281,25 @@ def draw_asm():
     a.ld("r3", "D_PX"), a.ld("r4", "D_PY"), a.ld("r5", "D_TABLE")
     a.ld("r6", "ROW_PIXELS"), a("lsl(r6, r6, 1)", "add(r6, r6, r2)", "mov(lr, r6)")
     a("push({r7})")
-    a("label(pixel_smooth)")
-    a("mov(r6, r10)", "sub(r6, r6, r0)", "sub(r6, r6, r1)", "orr(r6, r0)", "orr(r6, r1)", "bmi(outside_smooth)")
-    a("asr(r6, r3, 23)", "cmp(r6, %d)" % (TABLE - 1), "ble(ix_ok)", "mov(r6, %d)" % (TABLE - 1), "label(ix_ok)")
-    a("asr(r7, r4, 23)", "cmp(r7, %d)" % (TABLE - 1), "ble(iy_ok)", "mov(r7, %d)" % (TABLE - 1), "label(iy_ok)")
-    a("lsl(r7, r7, 6)", "add(r7, r7, r6)", "lsl(r7, r7, 1)", "add(r7, r7, r5)", "ldrh(r7, [r7, 0])", "strh(r7, [r2, 0])")
-    a("label(outside_smooth)")
-    a("mov(r6, r8)", "add(r0, r0, r6)", "mov(r6, r9)", "add(r1, r1, r6)")
-    a("mov(r6, r11)", "add(r3, r3, r6)", "mov(r6, r12)", "add(r4, r4, r6)")
-    a("add(r2, 2)", "mov(r6, lr)", "cmp(r2, r6)", "blt(pixel_smooth)")
+    # a triangle covers one run of each row: skip to it, paint it, stop after
+    # it. Normal indices never pass TABLE - 1 (NORMAL_SCALE 63), so no clamps.
+    inside = ("mov(r6, r10)", "sub(r6, r6, r0)", "sub(r6, r6, r1)", "orr(r6, r0)", "orr(r6, r1)")
+    step = ("mov(r6, r8)", "add(r0, r0, r6)", "mov(r6, r9)", "add(r1, r1, r6)",
+            "mov(r6, r11)", "add(r3, r3, r6)", "mov(r6, r12)", "add(r4, r4, r6)",
+            "add(r2, 2)", "mov(r6, lr)", "cmp(r2, r6)")
+    a("label(seek_smooth)")
+    a(*inside)
+    a("bpl(paint_smooth)")
+    a(*step)
+    a("blt(seek_smooth)", "b(row_end_smooth)")
+    a("label(paint_smooth)")
+    a("asr(r6, r3, 23)", "asr(r7, r4, 23)", "lsl(r7, r7, 6)", "add(r7, r7, r6)", "lsl(r7, r7, 1)")
+    a("add(r7, r7, r5)", "ldrh(r7, [r7, 0])", "strh(r7, [r2, 0])")
+    a(*step)
+    a("bge(row_end_smooth)")
+    a(*inside)
+    a("bpl(paint_smooth)")
+    a("label(row_end_smooth)")
     a("pop({r7})")
     for value, step in (("D_E0", "E0_ROW_STEP"), ("D_E1", "E1_ROW_STEP"), ("D_PX", "PX_ROW_STEP"), ("D_PY", "PY_ROW_STEP")):
         a.ld("r0", value), a.ld("r1", step), a("add(r0, r0, r1)")
@@ -310,10 +323,7 @@ def draw_asm():
     a("add(r0, r0, r1)")
     a.ld("r1", "D_TRIS")
     a("lsl(r1, r1, 1)", "add(r0, r0, r1)", "ldrh(r1, [r0, 0])")
-    a("lsr(r0, r1, 9)")
-    a("cmp(r0, %d)" % (TABLE - 1), "ble(fx_ok)", "mov(r0, %d)" % (TABLE - 1), "label(fx_ok)")
-    a("lsl(r1, r1, 24)", "lsr(r1, r1, 25)")
-    a("cmp(r1, %d)" % (TABLE - 1), "ble(fy_ok)", "mov(r1, %d)" % (TABLE - 1), "label(fy_ok)")
+    a("lsr(r0, r1, 9)", "lsl(r1, r1, 24)", "lsr(r1, r1, 25)")  # <= TABLE - 1: no clamps
     a("lsl(r1, r1, 6)", "add(r1, r1, r0)", "lsl(r1, r1, 1)")
     a.ld("r0", "D_TABLE")
     a("add(r1, r1, r0)", "ldrh(r1, [r1, 0])")
@@ -322,12 +332,21 @@ def draw_asm():
     a("label(rows_flat)")
     a.ld("r0", "D_E0"), a.ld("r1", "D_E1"), a.ld("r2", "D_ROW"), a.ld("r3", "D_COLOR")
     a.ld("r4", "ROW_PIXELS"), a("lsl(r4, r4, 1)", "add(r4, r4, r2)", "mov(lr, r4)")
-    a("label(pixel_flat)")
-    a("mov(r4, r10)", "sub(r4, r4, r0)", "sub(r4, r4, r1)", "orr(r4, r0)", "orr(r4, r1)", "bmi(outside_flat)")
+    inside = ("mov(r4, r10)", "sub(r4, r4, r0)", "sub(r4, r4, r1)", "orr(r4, r0)", "orr(r4, r1)")
+    step = ("mov(r4, r8)", "add(r0, r0, r4)", "mov(r4, r9)", "add(r1, r1, r4)",
+            "add(r2, 2)", "mov(r4, lr)", "cmp(r2, r4)")
+    a("label(seek_flat)")
+    a(*inside)
+    a("bpl(paint_flat)")
+    a(*step)
+    a("blt(seek_flat)", "b(row_end_flat)")
+    a("label(paint_flat)")
     a("strh(r3, [r2, 0])")
-    a("label(outside_flat)")
-    a("mov(r4, r8)", "add(r0, r0, r4)", "mov(r4, r9)", "add(r1, r1, r4)")
-    a("add(r2, 2)", "mov(r4, lr)", "cmp(r2, r4)", "blt(pixel_flat)")
+    a(*step)
+    a("bge(row_end_flat)")
+    a(*inside)
+    a("bpl(paint_flat)")
+    a("label(row_end_flat)")
     for value, step in (("D_E0", "E0_ROW_STEP"), ("D_E1", "E1_ROW_STEP")):
         a.ld("r0", value), a.ld("r1", step), a("add(r0, r0, r1)")
         a.st("r0", value)

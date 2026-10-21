@@ -27,7 +27,7 @@ F = np.float32
 
 def load(name):
     data = (ROOT / "assets" / ("%s.bin" % name)).read_bytes()
-    nv, nt = (int(n) for n in np.frombuffer(data[:4], dtype="<u2"))
+    nv, nt, focal = (int(n) for n in np.frombuffer(data[:6], dtype="<u2"))
     at = 8
     positions = np.frombuffer(data, dtype="<f4", count=nv * 3, offset=at).reshape(-1, 3)
     at += nv * 12
@@ -36,7 +36,7 @@ def load(name):
     face_normals = np.frombuffer(data, dtype="<f4", count=nt * 3, offset=at).reshape(-1, 3)
     at += nt * 12
     triangles = np.frombuffer(data, dtype="<u2", count=nt * 3, offset=at).reshape(-1, 3)
-    return positions, normals, face_normals, triangles
+    return positions, normals, face_normals, triangles, focal
 
 
 def rotate(m, p):
@@ -49,15 +49,15 @@ def to_int(v):
     return v.astype(np.int32)  # truncation, like vcvt_s32_f32
 
 
-def transform(matrix, positions, normals, face_normals):
+def transform(matrix, positions, normals, face_normals, focal):
     """(geo verts, tri face normals) as the board's transform makes them:
     VERT u16 per vertex; face normal x, y per triangle."""
     m = np.array(matrix, dtype=F)
     rx, ry, rz = rotate(m, positions)
     rz = rz + F(view.DISTANCE)
     inv = F(1.0) / rz
-    sx = F(view.CENTER_X16) + (rx * F(view.FOCAL16)) * inv
-    sy = F(view.CENTER_Y16) - (ry * F(view.FOCAL16)) * inv
+    sx = F(view.CENTER_X16) + (rx * F(focal * 16)) * inv
+    sy = F(view.CENTER_Y16) - (ry * F(focal * 16)) * inv
     nx, ny, _ = rotate(m, normals)
     fx, fy, _ = rotate(m, face_normals)
     k = F(view.NORMAL_SCALE)
@@ -78,7 +78,7 @@ def transform(matrix, positions, normals, face_normals):
 
 def setup(name):
     """The board's buffers for a model: (geo, tri, args, model)."""
-    positions, normals, face_normals, triangles = load(name)
+    positions, normals, face_normals, triangles, focal = load(name)
     nv, nt = len(positions), len(triangles)
     geo = np.zeros(nv * mesh.VERT + 2 * nt, dtype=np.uint16)
     tri = triangles.astype(np.uint16).reshape(-1).copy()
@@ -93,7 +93,7 @@ def setup(name):
     args[mesh.A_DEPTH_SHIFT] = 7
     args[mesh.A_BACKGROUND] = view.BACKGROUND
     args[mesh.A_WIRE] = view.WIRE
-    return geo, tri, args, (positions, normals, face_normals)
+    return geo, tri, args, (positions, normals, face_normals, focal)
 
 
 def table_for(mode):
