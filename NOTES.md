@@ -311,3 +311,18 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   number of u16s, which misaligned everything carved after it in the scratch
   and put the table 2 bytes into the transform block (`_sizes()` rounds each
   part to 4 now); and an un-watchdogged probe hung the board with USB down.
+- Bigger models, button 3 pause: each model file carries its own focal
+  length, the largest that keeps it inside the 240x200 window (4 px margin)
+  through a whole turn at the demo's tilt (`make_meshes.focal()`), so every
+  projected value stays positive: teapot 332, bunny 292 (was 190 for both).
+- Painter's algorithm vs the teapot: the original spout and handle run into
+  the body, and sorting by triangle depth can't order surfaces that cut each
+  other (dark jagged patches at the spout's base). `make_meshes` tessellates
+  the spout and handle twice as finely and drops their triangles inside the
+  body (a surface of revolution: nearer the axis than its radius at that
+  height). Teapot now 2,065 vertices, 3,926 triangles; scratch 46 KB.
+- Bigger models cost pixels (teapot Phong 29 ms, 20 fps). Normals are now
+  scaled by 63, not 64, so table indices never pass 63 and the asm drops the
+  clamps; and each row skips to the triangle's single run of pixels, paints
+  it and stops. Teapot Phong 26 ms; whole frames 30 fps everywhere again,
+  all frames still bit-identical.

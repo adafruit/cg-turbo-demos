@@ -7,7 +7,7 @@ Three 64 x 64 little-endian rgb565 tables, back to back: Lambert (diffuse
 only), Phong (specular from the reflected light, (R.V)^n) and Blinn (specular
 from the half vector, (N.H)^n), with the same light, material and exponent,
 so Phong and Blinn differ only in the specular model. Each is indexed by a
-view-space normal: [iy * 64 + ix], nx = (2 ix + 1 - 64) / 64, ny likewise
+view-space normal: [iy * 64 + ix], nx = (2 ix + 1 - 64) / 63, ny likewise
 (y up), facing the camera. The light is directional and the view nearly
 orthographic, so a pixel's lighting depends only on its normal: these tables
 are the per-pixel lighting.
@@ -33,7 +33,7 @@ def rgb565(c):
 
 
 def table(mode):
-    i = (np.arange(64) * 2 + 1 - 64) / 64
+    i = (np.arange(64) * 2 + 1 - 64) / 63  # meshview's NORMAL_SCALE
     nx, ny = np.meshgrid(i, i)
     nz = -np.sqrt(np.clip(1 - nx * nx - ny * ny, 0, 1))  # toward the camera, which looks along +z
     n = np.stack([nx, ny, nz], axis=-1)

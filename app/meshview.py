@@ -13,11 +13,13 @@ WIDTH = 240  # the back buffer: the model spins in the middle of the screen
 HEIGHT = 200
 CENTER_X16 = WIDTH * 8  # screen center, 1/16 pixels
 CENTER_Y16 = HEIGHT * 8
-FOCAL16 = 190 * 16  # pixels per unit at distance 1, in 1/16 pixels: small enough
-# that the unit sphere at DISTANCE stays inside the back buffer (all positive)
+# Each model file carries its own focal length (pixels per unit at distance
+# 1): as large as keeps it inside the back buffer through a whole turn, so
+# every projected value stays positive (tools/make_meshes.py).
 DISTANCE = 3.0  # from the camera to the model's center (the model fits radius 1)
 DEPTH_SCALE = 4096.0  # integer depth = view z * DEPTH_SCALE
-NORMAL_SCALE = 64.0  # integer normal = view normal * NORMAL_SCALE + NORMAL_OFFSET
+NORMAL_SCALE = 63.0  # integer normal = view normal * NORMAL_SCALE + NORMAL_OFFSET:
+# 1..127, so table indices (>> 1) stay within 0..63 and need no clamping
 NORMAL_OFFSET = 64
 TILT = -0.35  # radians: the model leans toward the camera, so we see a little from above
 MODES = ("wireframe", "lambert", "phong", "blinn")
@@ -51,7 +53,7 @@ class Model:
 
         self.data = load(path)
         counts = memoryview(self.data).cast("H")
-        self.verts, self.tris = counts[0], counts[1]
+        self.verts, self.tris, self.focal = counts[0], counts[1], counts[2]
         base = mem.address(self.data)
         self.positions = base + 8
         self.normals = self.positions + 12 * self.verts
@@ -99,7 +101,6 @@ class MeshView:
         f[mesh.X_DISTANCE] = DISTANCE
         f[mesh.X_CENTER_X16] = CENTER_X16
         f[mesh.X_CENTER_Y16] = CENTER_Y16
-        f[mesh.X_FOCAL16] = FOCAL16
         f[mesh.X_DEPTH_SCALE] = DEPTH_SCALE
         f[mesh.X_NORMAL_SCALE] = NORMAL_SCALE
         f[mesh.X_ONE] = 1.0
@@ -120,6 +121,7 @@ class MeshView:
         block[mesh.X_VERTS] = m.verts
         block[mesh.X_FACE_NORMALS] = m.face_normals
         block[mesh.X_TRIS] = m.tris
+        self.block_floats[mesh.X_FOCAL16] = m.focal * 16
         self.args[mesh.A_TRIS] = m.tris
         self.args[mesh.A_ORDER_AT] = m.verts * mesh.VERT
         self.args[mesh.A_FACES_AT] = m.verts * mesh.VERT + m.tris
