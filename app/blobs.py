@@ -16,10 +16,12 @@ MAX = 10  # more misses 30 fps once flip and Python are counted (11: ~25 fps)
 for _i in range(len(PATHS), MAX):
     PATHS.append((26 + (_i * 17) % 28, 0.2 + (_i * 0.137) % 0.5, 0.2 + (_i * 0.211) % 0.45, (_i * 2.39) % 6.28))
 START = 6
+SPEED = 0.9  # how fast the balls move along their paths
 
 
 def positions(t, width, height, count=START):
     """(x, y, radius) of the first count balls at time t seconds."""
+    t *= SPEED
     balls = []
     for r, sx, sy, phase in PATHS[:count]:
         x = width / 2 + (width / 2 - r * 0.6) * math.sin(t * sx * 2 + phase)
