@@ -39,7 +39,15 @@ bit-identical to the numpy reference in `tools/cornell_ref.py`.
 ![Cornell box with the classic boxes](docs/cornell_boxes.png)
 ![Cornell box with white walls](docs/cornell_white.png)
 
-Pick the demo in `app/code.py` (`DEMO = "voxel_demo"` or `"cornell_demo"`).
+**Metaballs** (`app/metaballs_demo.py`): six 2D metaballs gliding on
+Lissajous paths, shaded as glossy 3D blobs that merge, over a glowing
+contoured field. 30 fps at 320x200; the asm frame kernel is bit-identical to
+the viper reference.
+
+![Metaballs](docs/metaballs.png)
+
+Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"` or
+`"metaballs_demo"`).
 
 Coming: USB gamepad flying, and more Cornell box scenes. See
 [NOTES.md](NOTES.md) for the plan, every measurement, and what was learned
