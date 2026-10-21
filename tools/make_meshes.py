@@ -21,7 +21,7 @@ counterclockwise seen from outside. File format (little-endian):
       other modes read only 6 bytes a triangle
   if the header's last u16 is 1 (the teapot): triangles x 6 u16 texture
       coordinates, s and t of each corner in 1/UV_UNITS of the texture's
-      side (half texels of the 256 x 256 texture): per corner, so a patch
+      side (half texels of the 512 x 512 texture): per corner, so a patch
       seam can carry two
 
 The teapot's texture layout is injective (every texel on at most one place
@@ -115,8 +115,9 @@ def teapot(segments):
 FINE = 2  # the spout's and handle's subdivision, times the rest's
 # three.js's patch order: rim 4, body 8, handle 4, spout 4, lid 8, bottom 4
 PART = ["rim"] * 4 + ["body"] * 8 + ["handle"] * 4 + ["spout"] * 4 + ["lid"] * 8 + ["bottom"] * 4
-TEXTURE = 256  # texels square (tools/make_teapot_texture.py)
-UV_UNITS = 512  # stored texture coordinates per side: (UV_UNITS << 22) fits in 32 bits
+TEXTURE = 512  # texels square (tools/make_teapot_texture.py)
+UV_UNITS = 1024  # stored texture coordinates per side: value << 22 wraps at a
+# whole side, as the texture does (src/mesh.py interpolates mod 2^32)
 INSET = 0.5 / TEXTURE  # half a texel: the regions' texels never meet
 # the profiles, as (patch, its u direction along the chain): rows of four
 # patches around the axis (three.js's z up)
