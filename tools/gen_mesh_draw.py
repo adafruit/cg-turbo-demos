@@ -551,8 +551,8 @@ def textured(a):
     # table, lr the run's end
     a("movwt(r3, %d)" % SPREAD, "movw(r4, %d)" % WHITE, "push({r7})")
     a("label(paint_tex)")
-    # texel at t * 128 + s
-    a("lsr(r5, r0, 25)", "lsl(r6, r0, 16)", "lsr(r6, r6, 25)", "lsl(r6, r6, 7)", "add(r5, r5, r6)")
+    # texel at t * 256 + s
+    a("lsr(r5, r0, 24)", "lsl(r6, r0, 16)", "lsr(r6, r6, 24)", "lsl(r6, r6, 8)", "add(r5, r5, r6)")
     a("lsl(r5, r5, 1)", "mov(r6, r11)", "add(r5, r5, r6)", "ldrh(r5, [r5, 0])")
     # light at iy * 64 + ix
     a("lsr(r6, r1, 26)", "lsl(r7, r1, 16)", "lsr(r7, r7, 26)", "lsl(r7, r7, 6)", "add(r6, r6, r7)")

@@ -12,14 +12,14 @@ its face normal packed as x << 8 | y (offset likewise) from args[A_FACES_AT]
 triangle TRI vertex indices, then per triangle an edge mask for the quad
 wireframe (bit e for edge e: a-b, b-c, c-a), from TRI * args[A_TRIS], then
 (textured models) per triangle UV values: each corner's texture s, t in
-quarter texels. Front faces have a positive signed area on the screen (y
+1/512 of the texture's side. Front faces have a positive signed area on the screen (y
 down); back faces are skipped.
 
 Texturing (mode 4) interpolates s, t and the normal like Phong does, as
 Q = (qc << 22) + (e0 * (qa - qc) + e1 * (qb - qc)) * inv, in wrapping 32-bit
 arithmetic (args[A_WRAP] wraps a value here, as the asm's registers do; ints
 don't wrap on a desktop). They go in pairs packed in one word, high << 16 +
-low (s, t >> 15: 1/512 texels; normal x, y >> 13), and so do their steps
+low (s, t >> 15: 1/65536 of a side; normal x, y >> 13), and so do their steps
 across and down: packed values start at the box's top left corner and step
 down its rows and along each row, so the asm keeps two registers for four
 values. The texel is scaled by its lighting entry's m / 32 and the highlight
@@ -115,7 +115,7 @@ TRI = const(3)
 UV = const(6)  # u16 per triangle: s, t of corners a, b, c
 BUCKETS = const(256)
 TABLE = const(64)  # lighting tables are TABLE x TABLE
-TEXTURE_SHIFT = const(7)  # textures are 128 x 128
+TEXTURE_SHIFT = const(8)  # textures are 256 x 256
 SPREAD = const(0x07E0F81F)  # rgb565 as (c | c << 16) & SPREAD
 WHITE = const(0x0841)  # h * WHITE: rgb565 gray h / 31
 
@@ -356,7 +356,7 @@ def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32, texture
                             color = table[iy * TABLE + ix]
                         elif mode == 4:
                             packed = row_uv + (x - x0) * step_uv
-                            texel = texture[(((packed >> 9) & 127) << TEXTURE_SHIFT) + ((packed >> 25) & 127)]
+                            texel = texture[(((packed >> 8) & 255) << TEXTURE_SHIFT) + ((packed >> 24) & 255)]
                             packed = row_n + (x - x0) * step_n
                             light = table[((packed >> 10) & 63) * TABLE + ((packed >> 26) & 63)]
                             spread = (texel | (texel << 16)) & SPREAD
