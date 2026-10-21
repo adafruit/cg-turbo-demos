@@ -353,7 +353,7 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   Importing it into the menu's session would leave the menu's objects on the
   heap, and every demo needs to allocate its SRAM buffers first thing.
   `set_next_code_file` lasts one run, so reset (or Ctrl-D) comes back to the
-  menu. The menu remembers the last demo started in `microcontroller.nvm[0]`.
+  menu, with the first demo (VoxelSpace) highlighted.
 - Checked by doing what button 1 does from the REPL for each demo: all four
   start at their usual speeds, with no PSRAM warnings.
 - Button help in every demo: `Display.text()` / `lines()` draw the built-in
