@@ -17,7 +17,10 @@ counterclockwise seen from outside. File format (little-endian):
   1: as large as keeps the model inside the demo's window through a whole
   turn), u16 0
   vertices x 3 f32 positions, vertices x 3 f32 normals (smooth),
-  triangles x 3 f32 face normals, triangles x 3 u16 vertex indices
+  triangles x 3 f32 face normals, triangles x 3 u16 vertex indices,
+  triangles x u16 edge masks for the quad wireframe (bit 0 a-b, 1 b-c,
+      2 c-a; 0 for the diagonal of a quad), apart from the indices so the
+      other modes read only 6 bytes a triangle
 """
 
 import argparse
@@ -211,11 +214,48 @@ def focal(positions):
     return int(min(half_w / reach_x, half_h / reach_y))
 
 
+def quad_edges(positions, triangles, face_normals):
+    """Pair triangles into quads for the quad wireframe: two triangles that
+    share an edge pair up when it is the longest edge of both and they are
+    nearly flat together, best pairs first; the shared edge, the quad's
+    diagonal, is left out of both masks. The teapot was tessellated from quads
+    and comes back as them; the scanned bunny becomes mostly quads."""
+    from collections import defaultdict  # pylint: disable=import-outside-toplevel
+
+    p = positions[triangles]  # (t, 3, xyz)
+    lengths = np.stack([np.linalg.norm(p[:, (e + 1) % 3] - p[:, e], axis=1) for e in range(3)], axis=1)
+    longest = lengths.argmax(axis=1)
+    users = defaultdict(list)
+    for t, tri in enumerate(triangles):
+        for e in range(3):
+            u, v = tri[e], tri[(e + 1) % 3]
+            users[(min(u, v), max(u, v))].append((t, e))
+    candidates = []
+    for pair in users.values():
+        if len(pair) != 2:
+            continue
+        (t1, e1), (t2, e2) = pair
+        flat = float(face_normals[t1] @ face_normals[t2])
+        if longest[t1] == e1 and longest[t2] == e2 and flat > 0.9:
+            candidates.append((flat, t1, e1, t2, e2))
+    masks = np.full(len(triangles), 7, dtype=np.uint16)
+    paired = np.zeros(len(triangles), dtype=bool)
+    for _, t1, e1, t2, e2 in sorted(candidates, reverse=True):
+        if not paired[t1] and not paired[t2]:
+            masks[t1] &= 7 ^ (1 << e1)
+            masks[t2] &= 7 ^ (1 << e2)
+            paired[t1] = paired[t2] = True
+    print("  quads: %d of %d triangles paired" % (paired.sum(), len(triangles)))
+    return masks
+
+
 def write(path, positions, normals, face_normals, triangles):
     f = focal(positions)
+    masks = quad_edges(positions, triangles, face_normals)
     header = np.array([len(positions), len(triangles), f, 0], dtype="<u2").tobytes()
     data = header + b"".join(
-        a.astype(t).tobytes() for a, t in ((positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"))
+        a.astype(t).tobytes()
+        for a, t in ((positions, "<f4"), (normals, "<f4"), (face_normals, "<f4"), (triangles, "<u2"), (masks, "<u2"))
     )
     path.write_bytes(data)
     print(

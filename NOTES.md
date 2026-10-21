@@ -326,3 +326,12 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   clamps; and each row skips to the triangle's single run of pixels, paints
   it and stops. Teapot Phong 26 ms; whole frames 30 fps everywhere again,
   all frames still bit-identical.
+- Quad wireframe (button 2's second mode): `make_meshes.quad_edges()` pairs
+  triangles that share their longest edge and are nearly flat together (best
+  first), and stores per triangle an edge mask without the quad's diagonal;
+  mesh.draw mode 3 draws only those edges. The teapot comes back as Newell's
+  patch grid (3,434 of 3,926 triangles paired); the scanned bunny is
+  quad-dominant (2,524 of 3,851). The masks sit after the index block in the
+  file, not in the records: 8-byte records cost a third more PSRAM reads in
+  every mode and teapot Phong fell to 24 fps; with 6-byte records again, all
+  five modes hold 30 fps, all bit-identical.

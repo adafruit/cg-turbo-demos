@@ -35,7 +35,7 @@ def load(name):
     at += nv * 12
     face_normals = np.frombuffer(data, dtype="<f4", count=nt * 3, offset=at).reshape(-1, 3)
     at += nt * 12
-    triangles = np.frombuffer(data, dtype="<u2", count=nt * 3, offset=at).reshape(-1, 3)
+    triangles = np.frombuffer(data, dtype="<u2", count=nt * 4, offset=at)  # indices, then edge masks
     return positions, normals, face_normals, triangles, focal
 
 
@@ -79,9 +79,9 @@ def transform(matrix, positions, normals, face_normals, focal):
 def setup(name):
     """The board's buffers for a model: (geo, tri, args, model)."""
     positions, normals, face_normals, triangles, focal = load(name)
-    nv, nt = len(positions), len(triangles)
+    nv, nt = len(positions), len(triangles) // 4  # 3 indices a triangle, then a mask each
     geo = np.zeros(nv * mesh.VERT + 2 * nt, dtype=np.uint16)
-    tri = triangles.astype(np.uint16).reshape(-1).copy()
+    tri = triangles.astype(np.uint16).copy()
     args = np.zeros(mesh.HEADER + mesh.BUCKETS + 1, dtype=np.int32)
     args[mesh.A_WIDTH] = view.WIDTH
     args[mesh.A_HEIGHT] = view.HEIGHT

@@ -22,9 +22,9 @@ NORMAL_SCALE = 63.0  # integer normal = view normal * NORMAL_SCALE + NORMAL_OFFS
 # 1..127, so table indices (>> 1) stay within 0..63 and need no clamping
 NORMAL_OFFSET = 64
 TILT = -0.35  # radians: the model leans toward the camera, so we see a little from above
-MODES = ("wireframe", "lambert", "phong", "blinn")
-KERNEL_MODES = (0, 1, 2, 2)  # mesh.draw's mode for each
-TABLES = (None, 0, 1, 2)  # which lighting table (assets/mesh_luts.bin) each uses
+MODES = ("triangles", "quads", "lambert", "phong", "blinn")
+KERNEL_MODES = (0, 3, 1, 2, 2)  # mesh.draw's mode for each
+TABLES = (None, None, 0, 1, 2)  # which lighting table (assets/mesh_luts.bin) each uses
 BACKGROUND = 0x0841
 WIRE = 0x07E8
 
@@ -58,7 +58,7 @@ class Model:
         self.positions = base + 8
         self.normals = self.positions + 12 * self.verts
         self.face_normals = self.normals + 12 * self.verts
-        # the file's vertex indices are the triangle records (TRI u16 each)
+        # the file's vertex indices are the records (TRI u16 each), then edge masks
         self.tri = memoryview(self.data)[8 + 24 * self.verts + 12 * self.tris :]
 
 

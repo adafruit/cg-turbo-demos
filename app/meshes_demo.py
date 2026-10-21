@@ -1,7 +1,7 @@
 """3D models: the Utah teapot and the Stanford bunny, spinning slowly.
 
-Button 1 switches the model, button 2 the rendering: wireframe, Lambert
-(flat), Phong and Blinn (per-pixel lighting). Button 3 pauses and resumes
+Button 1 switches the model, button 2 the rendering: triangle wireframe,
+quad wireframe, Lambert (flat), Phong and Blinn (per-pixel lighting). Button 3 pauses and resumes
 the spin.
 """
 

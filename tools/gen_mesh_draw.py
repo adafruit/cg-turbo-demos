@@ -37,6 +37,7 @@ ALIAS = {
     "E1_ROW_STEP": "D_X1",
     "ROWS": "D_Y0",
     "ROW_PIXELS": "D_Y1",
+    "EDGE_MASK": "D_X0",  # wireframes only
     "VA": "D_PX",
     "VB": "D_PY",
     "VC": "D_COLOR",
@@ -196,7 +197,7 @@ def draw_asm():
         a.st("r0", ys)
         a.st("r1", slot)
     a.ld("r0", "D_MODE")
-    a("cmp(r0, 0)", "beq_w(wireframe)")
+    a("cmp(r0, 0)", "beq_w(wireframe)", "cmp(r0, 3)", "beq_w(wireframe)")
 
     # ---- filled
     # r10 area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
@@ -360,8 +361,27 @@ def draw_asm():
     # ---- wireframe: Bresenham between pixel centers, as mesh.draw does.
     # r0 x0, r1 y0, r2 err, r3 r4 scratch, r5 sx, r6 sy; r8 x1, r9 y1, r10 dx, r11 dy
     a("label(wireframe)")
+    # which edges: all three, or (quad wireframe) the triangle's mask
+    a("mov(r1, 7)")
+    a.ld("r0", "D_MODE")
+    a("cmp(r0, 3)", "bne(all_edges)")
+    a.ld("r0", "D_ORDER")
+    a.ld("r1", "D_K")
+    a("lsl(r1, r1, 1)", "add(r0, r0, r1)", "ldrh(r0, [r0, 0])")
+    # masks follow the records: tri + TRI_BYTES * tris + 2 * t
+    a("lsl(r0, r0, 1)")
+    a.ld("r1", "D_TRI")
+    a("add(r0, r0, r1)")
+    a.ld("r1", "D_TRIS")
+    a("lsl(r2, r1, 2)", "lsl(r1, r1, 1)", "add(r1, r1, r2)", "add(r0, r0, r1)")
+    a("ldrh(r1, [r0, 0])")
+    a("label(all_edges)")
+    a.st("r1", "EDGE_MASK")
     for edge, (p, q) in enumerate((("A", "B"), ("B", "C"), ("C", "A"))):
         line, step_x, no_x, no_y, plotted, sx_pos, sy_pos = (a.new(n) for n in ("line", "step_x", "no_x", "no_y", "plotted", "sx_pos", "sy_pos"))
+        skip_edge = a.new("skip_edge")
+        a.ld("r0", "EDGE_MASK")
+        a("mov(r1, %d)" % (1 << edge), "and_(r1, r0)", "beq_w(%s)" % skip_edge)
         a.ld("r0", "D_%sX" % p), a("asr(r0, r0, 4)")
         a.ld("r1", "D_%sY" % p), a("asr(r1, r1, 4)")
         a.ld("r3", "D_%sX" % q), a("asr(r3, r3, 4)", "mov(r8, r3)")
@@ -390,6 +410,7 @@ def draw_asm():
         a("label(%s)" % no_y)
         a("b(%s)" % line)
         a("label(%s)" % done_edge)
+        a("label(%s)" % skip_edge)
 
     a("label(next_triangle)")
     a.ld("r0", "D_K"), a("add(r0, 1)")
