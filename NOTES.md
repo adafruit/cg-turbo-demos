@@ -266,3 +266,8 @@ indexes a 256-color glow palette with contour bands. All integer math.
   so the count stops at 10. Count whole frames, not render time, before
   promising a frame rate. A 12-ball frame in a rotated hue is bit-identical
   to the reference.
+- Double-clicking button 1 turns the glow (and its contour bands) off and
+  on: `show_glow()` fills the SRAM glow palette with its first color, the
+  empty field's; `next_hue()` keeps the state. A single click now acts
+  0.35 s after the press, once it can't be the start of a double click.
+  Glow-off and glow-on frames are bit-identical to the reference.

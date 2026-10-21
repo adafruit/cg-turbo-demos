@@ -46,12 +46,13 @@ bit-identical to the viper reference.
 
 | button | does |
 | --- | --- |
-| 1 | next hue (six) |
+| 1 | next hue (six); double-click: glow off / on |
 | 2 | one ball fewer (down to 1) |
 | 3 | one ball more (up to 10) |
 
 ![Metaballs](docs/metaballs.png)
 ![Metaballs in six hues](docs/metaballs_hues.png)
+![Metaballs without the glow](docs/metaballs_no_glow.png)
 
 Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"` or
 `"metaballs_demo"`).
