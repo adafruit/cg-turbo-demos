@@ -6,6 +6,8 @@ after the framebuffer: create the Display before allocating anything else big.
 hot per-frame data.
 """
 
+import array
+
 import board
 import displayio
 import picodvi
@@ -18,8 +20,10 @@ BACK_HEIGHT = 200
 
 
 class Display:
-    def __init__(self, scratch=0, back=True):
-        """back=False: no back buffer, for demos that draw straight to the screen."""
+    def __init__(self, scratch=0, back=True, back_width=WIDTH):
+        """back=False: no back buffer, for demos that draw straight to the
+        screen. back_width < WIDTH: a narrower back buffer (less SRAM),
+        shown in the middle of the screen."""
         displayio.release_displays()
         self.framebuffer = picodvi.Framebuffer(
             WIDTH,
@@ -36,7 +40,8 @@ class Display:
         )
         self.screen = memoryview(self.framebuffer).cast("B")
         self.scratch = bytearray(scratch)
-        self.back = bytearray(WIDTH * BACK_HEIGHT * 2 if back else 0)
+        self.back_width = back_width
+        self.back = bytearray(back_width * BACK_HEIGHT * 2 if back else 0)
         for name in ("scratch", "back"):
             if not len(getattr(self, name)):
                 continue
@@ -45,6 +50,12 @@ class Display:
                 print("warning: %s buffer is in PSRAM (0x%08x): rendering will be slow" % (name, where))
         top = (HEIGHT - BACK_HEIGHT) // 2 * WIDTH * 2
         self.letterbox = self.screen[top : top + len(self.back)] if back else None
+        if back and back_width < WIDTH:
+            # rows of the narrow back buffer go to the middle of each screen row
+            left = (WIDTH - back_width) // 2 * 2
+            self.letterbox = None
+            self.window = mem.address(self.screen) + top + left
+            self.layout = array.array("i", (back_width // 2, WIDTH // 2))
         self.wait_for_vblank = getattr(self.framebuffer, "wait_for_vblank", None)
         row = bytes(WIDTH * 2)
         for y in range(HEIGHT):
@@ -54,4 +65,7 @@ class Display:
         """Show the back buffer: starts at vblank and outruns the beam, so no tearing."""
         if self.wait_for_vblank:
             self.wait_for_vblank()
-        self.letterbox[:] = self.back
+        if self.letterbox is not None:
+            self.letterbox[:] = self.back
+        else:
+            mem.copy_rows(self.window, self.back, BACK_HEIGHT, self.layout)

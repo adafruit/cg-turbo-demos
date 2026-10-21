@@ -54,8 +54,30 @@ bit-identical to the viper reference.
 ![Metaballs in six hues](docs/metaballs_hues.png)
 ![Metaballs without the glow](docs/metaballs_no_glow.png)
 
-Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"` or
-`"metaballs_demo"`).
+**3D models** (`app/meshes_demo.py`): the Utah teapot (2,256 triangles) and
+the Stanford bunny (3,851), spinning slowly, at 30 fps in every mode. The
+transform runs on the FPU, then back-face culling, a bucket sort back to front
+and an integer scanline fill, all in asm and bit-identical to the references.
+Phong and Blinn light every pixel from its interpolated normal.
+
+| button | does |
+| --- | --- |
+| 1 | teapot / bunny |
+| 2 | wireframe -> Lambert (flat) -> Phong -> Blinn |
+
+![The teapot and the bunny in the four modes](docs/meshes.png)
+
+Run `python3 tools/make_meshes.py` before deploying: it downloads the models
+and writes `assets/teapot.bin` (committed) and `assets/bunny.bin` (not
+committed). The teapot is Martin Newell's 1975 Bezier patch data, taken from
+three.js (MIT). The bunny is from the
+[Stanford 3D Scanning Repository](https://graphics.stanford.edu/data/3Dscanrep/)
+(Stanford University Computer Graphics Laboratory), which asks for this
+acknowledgment and for permission for commercial use, so it is downloaded at
+build time rather than redistributed here.
+
+Pick the demo in `app/code.py` (`DEMO = "voxel_demo"`, `"cornell_demo"`,
+`"metaballs_demo"` or `"meshes_demo"`).
 
 Coming: USB gamepad flying, and more Cornell box scenes. See
 [NOTES.md](NOTES.md) for the plan, every measurement, and what was learned

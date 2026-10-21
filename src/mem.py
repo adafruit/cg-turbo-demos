@@ -20,3 +20,19 @@ def zero(buf: ptr32, words: int):
         buf[0] = 0
         buf = ptr32(int(buf) + 4)
         words -= 1
+
+
+@micropython.viper
+def copy_rows(dst: ptr32, src: ptr32, rows: int, layout: ptr32):
+    """Copy rows of layout[0] words from src (rows packed) to dst, whose rows
+    are layout[1] words apart: a narrow back buffer into the screen."""
+    words = layout[0]
+    stride = layout[1]
+    while rows > 0:
+        i = 0
+        while i < words:
+            dst[i] = src[i]
+            i += 1
+        dst = ptr32(int(dst) + 4 * stride)
+        src = ptr32(int(src) + 4 * words)
+        rows -= 1
