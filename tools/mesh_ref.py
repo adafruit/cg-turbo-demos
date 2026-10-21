@@ -92,16 +92,19 @@ def setup(name):
     args[mesh.A_DEPTH_MIN] = int(3 * (view.DISTANCE - 1) * view.DEPTH_SCALE)
     args[mesh.A_DEPTH_SHIFT] = 7
     args[mesh.A_BACKGROUND] = view.BACKGROUND
-    args[mesh.A_WIRE] = view.WIRE
     return geo, tri, args, (positions, normals, face_normals, focal)
 
 
-def table_for(mode):
+MODELS = ("teapot", "bunny")  # meshview's model order, and mesh_luts.bin's
+
+
+def table_for(name, mode):
     which = view.MODES.index(mode)
     table = np.zeros(mesh.TABLE * mesh.TABLE, dtype=np.uint16)
     if view.TABLES[which] is not None:
         luts = np.frombuffer((ROOT / "assets" / "mesh_luts.bin").read_bytes(), dtype="<u2")
-        table[:] = luts[view.TABLES[which] * 4096 : (view.TABLES[which] + 1) * 4096]
+        k = MODELS.index(name) * view.SHADED_TABLES + view.TABLES[which]
+        table[:] = luts[k * 4096 : (k + 1) * 4096]
     return table
 
 
@@ -111,10 +114,11 @@ def frame(name, mode, matrix):
     geo[: verts.size] = verts.reshape(-1)
     geo[int(args[mesh.A_FACES_AT]) :] = faces
     args[mesh.A_MODE] = view.KERNEL_MODES[view.MODES.index(mode)]
+    args[mesh.A_WIRE] = view.WIRES[view.MODES.index(mode)]
     back = np.zeros(view.WIDTH * view.HEIGHT, dtype=np.uint16)
     g, t, a = memoryview(geo), memoryview(tri), memoryview(args)
     mesh.sort(t, g, a)
-    mesh.draw(memoryview(back), memoryview(table_for(mode)), t, g, a)
+    mesh.draw(memoryview(back), memoryview(table_for(name, mode)), t, g, a)
     return back, int(args[mesh.A_VISIBLE])
 
 

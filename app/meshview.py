@@ -22,11 +22,12 @@ NORMAL_SCALE = 63.0  # integer normal = view normal * NORMAL_SCALE + NORMAL_OFFS
 # 1..127, so table indices (>> 1) stay within 0..63 and need no clamping
 NORMAL_OFFSET = 64
 TILT = -0.35  # radians: the model leans toward the camera, so we see a little from above
-MODES = ("triangles", "quads", "lambert", "phong", "blinn")
-KERNEL_MODES = (0, 3, 1, 2, 2)  # mesh.draw's mode for each
-TABLES = (None, None, 0, 1, 2)  # which lighting table (assets/mesh_luts.bin) each uses
+MODES = ("quads", "triangles", "lambert", "phong", "blinn")  # the first is the start
+KERNEL_MODES = (3, 0, 1, 2, 2)  # mesh.draw's mode for each
+TABLES = (None, None, 0, 1, 2)  # which of a model's lighting tables (assets/mesh_luts.bin) each uses
+SHADED_TABLES = 3  # lighting tables per model in mesh_luts.bin
+WIRES = (0xFFFF, 0x07E8, 0, 0, 0)  # wireframe colors: quads white, triangles green
 BACKGROUND = 0x0841
-WIRE = 0x07E8
 
 
 def rotation(angle, tilt=TILT):
@@ -96,7 +97,6 @@ class MeshView:
         args[mesh.A_DEPTH_MIN] = int(3 * (DISTANCE - 1) * DEPTH_SCALE)
         args[mesh.A_DEPTH_SHIFT] = 7
         args[mesh.A_BACKGROUND] = BACKGROUND
-        args[mesh.A_WIRE] = WIRE
         f = self.block_floats
         f[mesh.X_DISTANCE] = DISTANCE
         f[mesh.X_CENTER_X16] = CENTER_X16
@@ -126,14 +126,18 @@ class MeshView:
         self.args[mesh.A_ORDER_AT] = m.verts * mesh.VERT
         self.args[mesh.A_FACES_AT] = m.verts * mesh.VERT + m.tris
         block[mesh.X_FACES] = self.geo_address + 2 * (m.verts * mesh.VERT + m.tris)
+        if self.mode is not None:
+            self.show_mode(self.mode)  # this model's lighting tables
 
     def show_mode(self, index):
         """MODES[index]: loads its lighting table."""
         self.mode = index
         self.args[mesh.A_MODE] = KERNEL_MODES[index]
+        self.args[mesh.A_WIRE] = WIRES[index]
         self.block[mesh.X_FACES_ON] = 1 if KERNEL_MODES[index] == 1 else 0
         which = TABLES[index]
         if which is not None:
+            which += self.model * SHADED_TABLES
             start = which * 2 * mesh.TABLE * mesh.TABLE
             memoryview(self.table).cast("B")[:] = memoryview(self.luts)[start : start + 2 * mesh.TABLE * mesh.TABLE]
 
