@@ -271,3 +271,43 @@ indexes a 256-color glow palette with contour bands. All integer math.
   empty field's; `next_hue()` keeps the state. A single click now acts
   0.35 s after the press, once it can't be the start of a double click.
   Glow-off and glow-on frames are bit-identical to the reference.
+
+## 3D models (step 7)
+
+The Utah teapot (Newell's patches, tessellated 6x6, seams welded: 1,177
+vertices, 2,256 triangles) and the Stanford bunny (bun_zipper_res3: 1,889
+vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
+(flat), Phong and Blinn (per-pixel lighting from interpolated normals).
+
+- `tools/make_meshes.py`: downloads both, tessellates the teapot, centers and
+  scales to the unit sphere, smooth vertex normals and face normals, and
+  orients windings (the bunny's are consistent where its mesh is manifold).
+  `assets/bunny.bin` is built, not committed (Stanford's terms).
+- `tools/make_mesh_luts.py`: 64x64 lighting tables indexed by the view-space
+  normal (x, y; z toward the camera), for Lambert, Phong ((R.V)^n) and Blinn
+  ((N.H)^n), same light and exponent. With a directional light and a nearly
+  orthographic view, lighting depends only on the normal, so the tables are
+  the per-pixel lighting.
+- Pipeline: `mesh_asm.transform_asm` (FPU) rotates and projects vertices to
+  12.4 screen coordinates, depth and normal x, y as u16, and face normals
+  packed x << 8 | y (flat mode only); `mesh.sort` (cull back faces: positive
+  screen area is front; bucket sort far to near, 256 buckets) and `mesh.draw`
+  (clear; Bresenham edges, or edge-function fills over the bounding box,
+  normals interpolated as (e0 na + e1 nb + e2 nc) / area). The asm versions
+  (`mesh_draw`, from `tools/gen_mesh_draw.py`) step the edge functions and
+  n_sum * inv instead of multiplying per pixel, and use area - e0 - e1 for
+  the third edge function; results are identical.
+- `tools/mesh_ref.py`: numpy float32 transform (bit-exact spec) + the viper
+  sort/draw on the desktop. All 8 model/mode frames bit-identical on the board.
+- Memory: a 240x200 back buffer (96 KB, `Display(back_width=240)`, copied
+  into the screen's middle by `mem.copy_rows`) leaves SRAM for geo (vertex
+  values, drawing order, packed face normals: 34 KB for the bunny), the args,
+  the current lighting table (8 KB) and the transform block: 44 KB scratch.
+- Frames, render only: teapot 14-23 ms, bunny 17-22 ms; whole frames hold
+  30 fps in every mode. Viper sort/draw was 49-83 ms.
+- Bugs worth remembering: the first back-face test was inverted (the renders
+  were each model's far inside, lit as if facing us: measure what fraction of
+  kept faces point at the camera); the packed face normals made geo an odd
+  number of u16s, which misaligned everything carved after it in the scratch
+  and put the table 2 bytes into the transform block (`_sizes()` rounds each
+  part to 4 now); and an un-watchdogged probe hung the board with USB down.
