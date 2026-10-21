@@ -12,7 +12,7 @@ PATHS = [
     (42, 0.41, 0.19, 4.4),
     (28, 0.67, 0.49, 5.2),
 ]
-MAX = 12
+MAX = 10  # more misses 30 fps once flip and Python are counted (11: ~25 fps)
 for _i in range(len(PATHS), MAX):
     PATHS.append((26 + (_i * 17) % 28, 0.2 + (_i * 0.137) % 0.5, 0.2 + (_i * 0.211) % 0.45, (_i * 2.39) % 6.28))
 START = 6

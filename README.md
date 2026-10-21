@@ -48,7 +48,7 @@ bit-identical to the viper reference.
 | --- | --- |
 | 1 | next hue (six) |
 | 2 | one ball fewer (down to 1) |
-| 3 | one ball more (up to 12) |
+| 3 | one ball more (up to 10) |
 
 ![Metaballs](docs/metaballs.png)
 ![Metaballs in six hues](docs/metaballs_hues.png)
