@@ -363,5 +363,5 @@ vertices, 3,851 triangles), spinning, in four modes: wireframe, Lambert
   so the text stays and costs nothing per frame. The 3D models' window
   background is now black, like the border, so the window doesn't show.
 - The 3D models demo shows the current shader in its top border (`shader:
-  quad / tri / lambert / phong / blinn`, `meshview.LABELS`), redrawn on each
+  quad / tri / Lambert / Phong / Blinn`, `meshview.LABELS`), redrawn on each
   button 2 press: `Display.fill()` clears the strip, then `text()`.
