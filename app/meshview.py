@@ -22,12 +22,14 @@ NORMAL_SCALE = 63.0  # integer normal = view normal * NORMAL_SCALE + NORMAL_OFFS
 # 1..127, so table indices (>> 1) stay within 0..63 and need no clamping
 NORMAL_OFFSET = 64
 TILT = -0.35  # radians: the model leans toward the camera, so we see a little from above
-MODES = ("quads", "triangles", "lambert", "phong", "blinn")  # the first is the start
-KERNEL_MODES = (3, 0, 1, 2, 2)  # mesh.draw's mode for each
-TABLES = (None, None, 0, 1, 2)  # which of a model's lighting tables (assets/mesh_luts.bin) each uses
-SHADED_TABLES = 3  # lighting tables per model in mesh_luts.bin
-WIRES = (0xFFFF, 0x07E8, 0, 0, 0)  # wireframe colors: quads white, triangles green
-LABELS = ("quad", "tri", "Lambert", "Phong", "Blinn")  # what the demo shows for each
+MODES = ("quads", "triangles", "lambert", "phong", "blinn", "texture")  # the first is the start
+KERNEL_MODES = (3, 0, 1, 2, 2, 4)  # mesh.draw's mode for each
+TABLES = (None, None, 0, 1, 2, 3)  # which of a model's lighting tables (assets/mesh_luts.bin) each uses
+SHADED_TABLES = 4  # lighting tables per model in mesh_luts.bin
+WIRES = (0xFFFF, 0x07E8, 0, 0, 0, 0)  # wireframe colors: quads white, triangles green
+LABELS = ("quad", "tri", "Lambert", "Phong", "Blinn", "texture")  # what the demo shows for each
+TEXTURED = 5  # MODES' texture mode: only for models with texture coordinates
+UNTEXTURED = 3  # what a model without them shows instead (Phong)
 BACKGROUND = 0x0000  # black, like the screen around the window
 
 
@@ -56,22 +58,29 @@ class Model:
         self.data = load(path)
         counts = memoryview(self.data).cast("H")
         self.verts, self.tris, self.focal = counts[0], counts[1], counts[2]
+        self.has_uvs = counts[3] == 1  # per corner, after the edge masks
+        self.texture = None  # MeshView loads it
         base = mem.address(self.data)
         self.positions = base + 8
         self.normals = self.positions + 12 * self.verts
         self.face_normals = self.normals + 12 * self.verts
-        # the file's vertex indices are the records (TRI u16 each), then edge masks
+        # the file's vertex indices are the records (TRI u16 each), then edge
+        # masks, then any texture coordinates
         self.tri = memoryview(self.data)[8 + 24 * self.verts + 12 * self.tris :]
 
 
 class MeshView:
     """The demo's state: models, mode, rotation, and the SRAM buffers."""
 
-    def __init__(self, model_paths, luts_path, scratch):
-        """scratch: SRAM (see scratch_bytes()) for the hot buffers."""
+    def __init__(self, model_paths, luts_path, scratch, texture_paths=()):
+        """scratch: SRAM (see scratch_bytes()) for the hot buffers.
+        texture_paths: per model, its texture (128 x 128 rgb565) or None."""
         import mem  # pylint: disable=import-outside-toplevel
 
         self.models = [Model(p) for p in model_paths]
+        for model, path in zip(self.models, texture_paths):
+            if path is not None and model.has_uvs:
+                model.texture = memoryview(load(path)).cast("H")
         sizes = _sizes([(m.verts, m.tris) for m in self.models])
         if len(scratch) < sum(sizes):
             raise ValueError("MeshView needs %d bytes of scratch" % sum(sizes))
@@ -109,6 +118,7 @@ class MeshView:
         self.block[mesh.X_GEO] = self.geo_address
         self.model = None
         self.mode = None
+        self.wanted = None  # the mode asked for: texture mode survives a visit to the bunny
         self.fast = True  # the asm sort and draw; False: the viper reference
         self.show_model(0)
         self.show_mode(0)
@@ -128,10 +138,24 @@ class MeshView:
         self.args[mesh.A_FACES_AT] = m.verts * mesh.VERT + m.tris
         block[mesh.X_FACES] = self.geo_address + 2 * (m.verts * mesh.VERT + m.tris)
         if self.mode is not None:
-            self.show_mode(self.mode)  # this model's lighting tables
+            self.show_mode(self.wanted)  # this model's lighting tables; texture again for the teapot
+
+    def can_show(self, index):
+        return index != TEXTURED or self.models[self.model].texture is not None
+
+    def next_mode(self):
+        """The next of MODES this model can show."""
+        index = (self.mode + 1) % len(MODES)
+        while not self.can_show(index):
+            index = (index + 1) % len(MODES)
+        self.show_mode(index)
 
     def show_mode(self, index):
-        """MODES[index]: loads its lighting table."""
+        """MODES[index] (or UNTEXTURED, if this model has no texture): loads
+        its lighting table."""
+        self.wanted = index
+        if not self.can_show(index):
+            index = UNTEXTURED
         self.mode = index
         self.args[mesh.A_MODE] = KERNEL_MODES[index]
         self.args[mesh.A_WIRE] = WIRES[index]
@@ -151,12 +175,13 @@ class MeshView:
         import mesh_asm  # pylint: disable=import-outside-toplevel
 
         mesh_asm.transform_asm(self.block_address)
-        tri = self.models[self.model].tri
+        model = self.models[self.model]
+        texture = model.texture if model.texture is not None else self.table  # unread unless textured
         if self.fast:
-            mesh.render_fast(back, self.table, tri, self.geo, self.args)
+            mesh.render_fast(back, self.table, model.tri, self.geo, self.args, texture)
         else:
-            mesh.sort(tri, self.geo, self.args)
-            mesh.draw(back, self.table, tri, self.geo, self.args)
+            mesh.sort(model.tri, self.geo, self.args)
+            mesh.draw(back, self.table, model.tri, self.geo, self.args, texture)
 
 
 def _sizes(model_counts):

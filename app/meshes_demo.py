@@ -2,8 +2,8 @@
 
 Button 1 switches the model, button 2 the rendering: quad wireframe (the
 start), triangle wireframe, Lambert (flat), Phong and Blinn (per-pixel
-lighting). Button 3 pauses and resumes
-the spin.
+lighting), and for the teapot texture mapping (Phong lit). Button 3 pauses
+and resumes the spin.
 """
 
 import gc
@@ -29,7 +29,7 @@ import meshview
 SPIN = 0.5  # radians per second
 REPORT_SECONDS = 2
 
-viewer = meshview.MeshView(("/teapot.bin", "/bunny.bin"), "/mesh_luts.bin", screen.scratch)
+viewer = meshview.MeshView(("/teapot.bin", "/bunny.bin"), "/mesh_luts.bin", screen.scratch, ("/teapot_texture.bin", None))
 buttons = keypad.Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 gc.collect()
 print("meshes: free heap %d" % gc.mem_free())
@@ -56,9 +56,10 @@ while True:
     if event and event.pressed:
         if event.key_number == 0:
             viewer.show_model((viewer.model + 1) % len(viewer.models))
+            show_shader()  # the bunny has no texture: Phong instead
             print("model", NAMES[viewer.model])
         elif event.key_number == 1:
-            viewer.show_mode((viewer.mode + 1) % len(meshview.MODES))
+            viewer.next_mode()
             show_shader()
             print("mode", meshview.MODES[viewer.mode])
         else:

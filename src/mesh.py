@@ -10,8 +10,20 @@ positive), then the drawing order from args[A_ORDER_AT], then per triangle
 its face normal packed as x << 8 | y (offset likewise) from args[A_FACES_AT]
 (the transform writes them, for flat shading). tri (u16, PSRAM is fine): per
 triangle TRI vertex indices, then per triangle an edge mask for the quad
-wireframe (bit e for edge e: a-b, b-c, c-a), from TRI * args[A_TRIS]. Front faces have a positive signed area on the
-screen (y down); back faces are skipped.
+wireframe (bit e for edge e: a-b, b-c, c-a), from TRI * args[A_TRIS], then
+(textured models) per triangle UV values: each corner's texture s, t in
+quarter texels. Front faces have a positive signed area on the screen (y
+down); back faces are skipped.
+
+Texturing (mode 4) interpolates s, t and the normal like Phong does, as
+Q = (qc << 22) + (e0 * (qa - qc) + e1 * (qb - qc)) * inv, in wrapping 32-bit
+arithmetic (args[A_WRAP] wraps a value here, as the asm's registers do; ints
+don't wrap on a desktop). They go in pairs packed in one word, high << 16 +
+low (s, t >> 15: 1/512 texels; normal x, y >> 13), and so do their steps
+across and down: packed values start at the box's top left corner and step
+down its rows and along each row, so the asm keeps two registers for four
+values. The texel is scaled by its lighting entry's m / 32 and the highlight
+added, on rgb565 spread to 0x07E0F81F (each channel with room to multiply).
 """
 
 import micropython
@@ -28,10 +40,11 @@ A_COUNTS_AT = const(5)  # args offset of BUCKETS + 1 counts
 A_DEPTH_MIN = const(6)  # smallest depth sum of a triangle's 3 vertices
 A_DEPTH_SHIFT = const(7)  # (depth sum - min) >> shift = bucket
 A_MODE = const(8)  # 0 wireframe, 1 flat (Lambert), 2 interpolated normals (Phong, Blinn),
-# 3 quad wireframe (only the edges in each triangle's mask)
+# 3 quad wireframe (only the edges in each triangle's mask), 4 textured (Phong)
 A_BACKGROUND = const(9)
 A_WIRE = const(10)  # wireframe color
 A_VISIBLE = const(11)  # out: front-facing triangles, in drawing order
+A_WRAP = const(12)  # scratch: storing an int here wraps it to 32 bits
 D_BLOCK = const(32)  # 32 words from here: what sort_asm() and draw_asm() use
 HEADER = const(64)
 
@@ -49,6 +62,7 @@ D_MODE = const(8)
 D_WIDTH = const(9)
 D_HEIGHT = const(10)
 D_WIRE = const(11)
+D_TEXTURE = const(11)  # mode 4: the texture's address (wireframes don't texture)
 D_DEPTH_MIN = const(12)
 D_DEPTH_SHIFT = const(13)
 D_BACKGROUND = const(14)
@@ -98,8 +112,12 @@ V_Z = const(2)
 V_NX = const(3)
 V_NY = const(4)
 TRI = const(3)
+UV = const(6)  # u16 per triangle: s, t of corners a, b, c
 BUCKETS = const(256)
 TABLE = const(64)  # lighting tables are TABLE x TABLE
+TEXTURE_SHIFT = const(7)  # textures are 128 x 128
+SPREAD = const(0x07E0F81F)  # rgb565 as (c | c << 16) & SPREAD
+WHITE = const(0x0841)  # h * WHITE: rgb565 gray h / 31
 
 
 @micropython.viper
@@ -147,7 +165,7 @@ def sort(tri: ptr16, geo: ptr16, args: ptr32):
 
 
 @micropython.viper
-def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
+def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32, texture: ptr16):
     """Clear, then draw args[A_VISIBLE] triangles in order."""
     w = args[A_WIDTH]
     h = args[A_HEIGHT]
@@ -245,10 +263,11 @@ def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
                 y1 = by
             if cy > y1:
                 y1 = cy
-            x0 = x0 >> 4
-            x1 = x1 >> 4
-            y0 = y0 >> 4
-            y1 = y1 >> 4
+            # the first and last pixel centers (16 k + 8) inside the box
+            x0 = (x0 + 7) >> 4
+            x1 = (x1 - 8) >> 4
+            y0 = (y0 + 7) >> 4
+            y1 = (y1 - 8) >> 4
             if x0 < 0:
                 x0 = 0
             if y0 < 0:
@@ -270,6 +289,51 @@ def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
             inv = 0
             if area > 0:
                 inv = (1 << 22) // area
+            if mode == 4:
+                # corner differences: s, t, normal x, y
+                uv = 4 * args[A_TRIS] + UV * t
+                sa = tri[uv] - tri[uv + 4]
+                sb = tri[uv + 2] - tri[uv + 4]
+                ta = tri[uv + 1] - tri[uv + 5]
+                tb = tri[uv + 3] - tri[uv + 5]
+                xa = geo[a + V_NX] - geo[c + V_NX]
+                xb = geo[b + V_NX] - geo[c + V_NX]
+                ya = geo[a + V_NY] - geo[c + V_NY]
+                yb = geo[b + V_NY] - geo[c + V_NY]
+                # e0, e1 at the box's first pixel, and their steps across and down
+                px = (x0 << 4) + 8
+                py = (y0 << 4) + 8
+                e0 = (cx - bx) * (py - by) - (cy - by) * (px - bx)
+                e1 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx)
+                d0 = -((cy - by) << 4)
+                d1 = -((ay - cy) << 4)
+                down0 = (cx - bx) << 4
+                down1 = (ax - cx) << 4
+                # packed: s, t (>> 15) and normal x, y (>> 13); the first value, x and y steps
+                args[A_WRAP] = (tri[uv + 4] << 22) + (e0 * sa + e1 * sb) * inv
+                row_uv = (args[A_WRAP] >> 15) << 16
+                args[A_WRAP] = (tri[uv + 5] << 22) + (e0 * ta + e1 * tb) * inv
+                row_uv += args[A_WRAP] >> 15
+                args[A_WRAP] = (d0 * sa + d1 * sb) * inv
+                step_uv = (args[A_WRAP] >> 15) << 16
+                args[A_WRAP] = (d0 * ta + d1 * tb) * inv
+                step_uv += args[A_WRAP] >> 15
+                args[A_WRAP] = (down0 * sa + down1 * sb) * inv
+                down_uv = (args[A_WRAP] >> 15) << 16
+                args[A_WRAP] = (down0 * ta + down1 * tb) * inv
+                down_uv += args[A_WRAP] >> 15
+                args[A_WRAP] = (geo[c + V_NX] << 22) + (e0 * xa + e1 * xb) * inv
+                row_n = (args[A_WRAP] >> 13) << 16
+                args[A_WRAP] = (geo[c + V_NY] << 22) + (e0 * ya + e1 * yb) * inv
+                row_n += args[A_WRAP] >> 13
+                args[A_WRAP] = (d0 * xa + d1 * xb) * inv
+                step_n = (args[A_WRAP] >> 13) << 16
+                args[A_WRAP] = (d0 * ya + d1 * yb) * inv
+                step_n += args[A_WRAP] >> 13
+                args[A_WRAP] = (down0 * xa + down1 * xb) * inv
+                down_n = (args[A_WRAP] >> 13) << 16
+                args[A_WRAP] = (down0 * ya + down1 * yb) * inv
+                down_n += args[A_WRAP] >> 13
             y = y0
             while y <= y1:
                 py = (y << 4) + 8
@@ -290,14 +354,25 @@ def draw(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
                             if iy > TABLE - 1:
                                 iy = TABLE - 1
                             color = table[iy * TABLE + ix]
+                        elif mode == 4:
+                            packed = row_uv + (x - x0) * step_uv
+                            texel = texture[(((packed >> 9) & 127) << TEXTURE_SHIFT) + ((packed >> 25) & 127)]
+                            packed = row_n + (x - x0) * step_n
+                            light = table[((packed >> 10) & 63) * TABLE + ((packed >> 26) & 63)]
+                            spread = (texel | (texel << 16)) & SPREAD
+                            spread = ((spread * (light & 0xFF)) >> 5) & SPREAD
+                            color = ((spread | (spread >> 16)) + (light >> 8) * WHITE) & 0xFFFF
                         back[y * w + x] = color
                     x += 1
+                if mode == 4:
+                    row_uv += down_uv
+                    row_n += down_n
                 y += 1
         k += 1
 
 
 @micropython.viper
-def render_fast(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
+def render_fast(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32, texture: ptr16):
     """sort() then draw(), in asm (mesh_draw): identical results."""
     d = D_BLOCK
     args[d + D_BACK] = int(back)
@@ -311,6 +386,8 @@ def render_fast(back: ptr16, table: ptr16, tri: ptr16, geo: ptr16, args: ptr32):
     args[d + D_WIDTH] = args[A_WIDTH]
     args[d + D_HEIGHT] = args[A_HEIGHT]
     args[d + D_WIRE] = args[A_WIRE]
+    if args[A_MODE] == 4:
+        args[d + D_TEXTURE] = int(texture)
     args[d + D_DEPTH_MIN] = args[A_DEPTH_MIN]
     args[d + D_DEPTH_SHIFT] = args[A_DEPTH_SHIFT]
     args[d + D_BACKGROUND] = args[A_BACKGROUND]

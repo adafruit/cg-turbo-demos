@@ -67,20 +67,27 @@ transform runs on the FPU, then back-face culling, a bucket sort back to front
 and an integer scanline fill, all in asm and bit-identical to the references.
 Phong and Blinn light every pixel from its interpolated normal. The teapot is
 a cool glazed clay and the bunny light gray (`tools/make_mesh_luts.py`).
+The teapot also wears a texture: a UV test grid on an injective layout (body
+around the bottom half; lid, handle and spout in the top half), Phong lit,
+with texture coordinates and normals interpolated per pixel.
 
 | button | does |
 | --- | --- |
 | 1 | teapot / bunny |
-| 2 | quad wireframe (white, the start) -> triangle wireframe (green) -> Lambert (flat) -> Phong -> Blinn |
+| 2 | quad wireframe (white, the start) -> triangle wireframe (green) -> Lambert (flat) -> Phong -> Blinn -> texture (teapot only) |
 | 3 | pause / resume the spin |
 
 ![The teapot and the bunny in the four modes](docs/meshes.png)
+![The textured teapot](docs/meshes_texture.png)
 
 The teapot is Martin Newell's 1975 Bezier patch data (via three.js); the
 bunny is from the
 [Stanford 3D Scanning Repository](https://graphics.stanford.edu/data/3Dscanrep/).
 `tools/make_meshes.py` downloads both and rebuilds `assets/teapot.bin` and
-`assets/bunny.bin`.
+`assets/bunny.bin`. The texture is the UV test grid from the University of
+Utah's [teapot page](https://graphics.cs.utah.edu/teapot/), whose injective
+layout this one follows; `tools/make_teapot_texture.py grid.png` rebuilds
+`assets/teapot_texture.bin` from it.
 
 To skip the menu while developing, set `DEMO` in `app/code.py` to a demo's
 module (`"voxel_demo"`, `"cornell_demo"`, `"metaballs_demo"` or

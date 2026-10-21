@@ -27,7 +27,7 @@ F = np.float32
 
 def load(name):
     data = (ROOT / "assets" / ("%s.bin" % name)).read_bytes()
-    nv, nt, focal = (int(n) for n in np.frombuffer(data[:6], dtype="<u2"))
+    nv, nt, focal, has_uvs = (int(n) for n in np.frombuffer(data[:8], dtype="<u2"))
     at = 8
     positions = np.frombuffer(data, dtype="<f4", count=nv * 3, offset=at).reshape(-1, 3)
     at += nv * 12
@@ -35,7 +35,8 @@ def load(name):
     at += nv * 12
     face_normals = np.frombuffer(data, dtype="<f4", count=nt * 3, offset=at).reshape(-1, 3)
     at += nt * 12
-    triangles = np.frombuffer(data, dtype="<u2", count=nt * 4, offset=at)  # indices, then edge masks
+    # indices, edge masks, then any texture coordinates
+    triangles = np.frombuffer(data, dtype="<u2", count=nt * (4 + mesh.UV * has_uvs), offset=at)
     return positions, normals, face_normals, triangles, focal
 
 
@@ -79,7 +80,7 @@ def transform(matrix, positions, normals, face_normals, focal):
 def setup(name):
     """The board's buffers for a model: (geo, tri, args, model)."""
     positions, normals, face_normals, triangles, focal = load(name)
-    nv, nt = len(positions), len(triangles) // 4  # 3 indices a triangle, then a mask each
+    nv, nt = len(positions), len(face_normals)
     geo = np.zeros(nv * mesh.VERT + 2 * nt, dtype=np.uint16)
     tri = triangles.astype(np.uint16).copy()
     args = np.zeros(mesh.HEADER + mesh.BUCKETS + 1, dtype=np.int32)
@@ -96,6 +97,25 @@ def setup(name):
 
 
 MODELS = ("teapot", "bunny")  # meshview's model order, and mesh_luts.bin's
+
+
+class Words:
+    """args for the viper reference here: int32 slots that wrap what's stored,
+    as the board's do (args[mesh.A_WRAP])."""
+
+    def __init__(self, array):
+        self.array = array
+
+    def __getitem__(self, i):
+        return int(self.array[i])
+
+    def __setitem__(self, i, value):
+        self.array[i] = ((value + (1 << 31)) & 0xFFFFFFFF) - (1 << 31)
+
+
+def texture_for(name):
+    path = ROOT / "assets" / ("%s_texture.bin" % name)
+    return np.frombuffer(path.read_bytes(), dtype="<u2").copy() if path.exists() else np.zeros(1, dtype=np.uint16)
 
 
 def table_for(name, mode):
@@ -116,9 +136,9 @@ def frame(name, mode, matrix):
     args[mesh.A_MODE] = view.KERNEL_MODES[view.MODES.index(mode)]
     args[mesh.A_WIRE] = view.WIRES[view.MODES.index(mode)]
     back = np.zeros(view.WIDTH * view.HEIGHT, dtype=np.uint16)
-    g, t, a = memoryview(geo), memoryview(tri), memoryview(args)
+    g, t, a = memoryview(geo), memoryview(tri), Words(args)
     mesh.sort(t, g, a)
-    mesh.draw(memoryview(back), memoryview(table_for(name, mode)), t, g, a)
+    mesh.draw(memoryview(back), memoryview(table_for(name, mode)), t, g, a, memoryview(texture_for(name)))
     return back, int(args[mesh.A_VISIBLE])
 
 

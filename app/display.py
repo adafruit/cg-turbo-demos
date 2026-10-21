@@ -14,6 +14,7 @@ import picodvi
 import terminalio
 
 import mem
+import mem_asm
 
 WIDTH = 320
 HEIGHT = 240
@@ -57,8 +58,13 @@ class Display:
             # rows of the narrow back buffer go to the middle of each screen row
             left = (WIDTH - back_width) // 2 * 2
             self.letterbox = None
-            self.window = mem.address(self.screen) + top + left
-            self.layout = array.array("i", (back_width // 2, WIDTH // 2))
+            if back_width % 8:
+                raise ValueError("back_width must be a multiple of 8")
+            # mem_asm.copy_rows_asm's dst, src, rows, words per row, dst stride
+            self.copy = array.array(
+                "i", (mem.address(self.screen) + top + left, mem.address(self.back), BACK_HEIGHT, back_width // 2, WIDTH * 2)
+            )
+            self.copy_address = mem.address(self.copy)
         self.wait_for_vblank = getattr(self.framebuffer, "wait_for_vblank", None)
         row = bytes(WIDTH * 2)
         for y in range(HEIGHT):
@@ -72,7 +78,7 @@ class Display:
         if self.letterbox is not None:
             self.letterbox[:] = self.back
         else:
-            mem.copy_rows(self.window, self.back, BACK_HEIGHT, self.layout)
+            mem_asm.copy_rows_asm(self.copy_address)
 
     def text(self, x, y, string, color=HINT):
         """Draw string with the built-in 6 x 12 font straight onto the screen,
