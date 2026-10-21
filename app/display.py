@@ -96,6 +96,13 @@ class Display:
                     if bitmap[tx + gx, ty + gy]:
                         pixels[at + gx] = color
 
+    def fill(self, x, y, width, height, color=0):
+        """A rectangle of the screen, e.g. to clear text before rewriting it."""
+        row = array.array("H", [color] * width)
+        for yy in range(y, y + height):
+            at = yy * WIDTH + x
+            self.pixels[at : at + width] = row
+
     def lines(self, x, y, strings, colors=None, spacing=12):
         """Several lines of text, one under the other."""
         for i, string in enumerate(strings):
