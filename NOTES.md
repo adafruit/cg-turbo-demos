@@ -24,9 +24,14 @@ to 640x480 60 Hz by picodvi.
 - Stock CircuitPython; developed on `11.0.0-alpha.1-126-gea91926f34`. Turbo
   `.mpy` loading is on for RP2xxx since 10.3.1; `Framebuffer.wait_for_vblank()`
   since 10.3.0.
-- `tools/mpy-cross` is Adafruit's build for that exact commit (mpy v6.3).
-  Compiled modules must match the firmware's mpy ABI: after a firmware update,
-  download the matching `mpy-cross-macos-<version>-arm64` from
+- `tools/mpy-cross` is Adafruit's build for that commit (mpy v6.3). A
+  native .mpy loads when its .mpy version and sub-version (6.3), arch
+  (armv7emsp) and small-int bits (31) match the firmware's: not only on the
+  exact firmware (checked the MicroPython .mpy format docs; the header is
+  `C 06 1f 1f`). So the bundle (`build.py --bundle`) should run on any
+  CircuitPython 10.3.1 or later with .mpy 6.3; only 11.0.0-alpha.1 is
+  tested. If the firmware's .mpy version moves on, download a matching
+  `mpy-cross-macos-<version>-arm64` from
   `adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/macos/`.
 - The stock loader has no inline assembler, so `tools/build.py` runs
   `tools/asm_to_viper.py` (from Adafruit's Motion Tracking Eyeballs guide) on

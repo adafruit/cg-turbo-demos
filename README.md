@@ -9,6 +9,23 @@ Output is 320x240 RGB565, pixel-doubled to 640x480 HDMI by `picodvi`.
 
 ![VoxelSpace](docs/voxelspace.png)
 
+## install on a Fruit Jam
+
+1. Install [CircuitPython](https://circuitpython.org/board/adafruit_fruit_jam/)
+   10.3.1 or later on the Fruit Jam (developed on 11.0.0-alpha.1). The demos'
+   compiled modules are `.mpy` version 6.3: if a future CircuitPython moves
+   to a newer `.mpy` version, they stop loading (`ValueError: incompatible
+   .mpy file`) until rebuilt (see "build from source").
+2. Download `cg-turbo-demos.zip` from the repo's
+   [releases](https://github.com/adafruit/cg-turbo-demos/releases) and unzip
+   it.
+3. Save the `code.py` already on your CIRCUITPY drive if you want to keep
+   it, then copy everything inside the unzipped `cg-turbo-demos` folder to
+   CIRCUITPY, merging its `lib` folder with the one on the drive. It holds
+   the demos and their data, the compiled modules in `lib`, and the one
+   library they need, `adafruit_display_text`. About 2 MB.
+4. Plug in an HDMI display. The board restarts into the menu.
+
 ## demos
 
 The board boots into a menu of the demos: button 3 moves up, button 2 down,
@@ -104,22 +121,30 @@ about making Turbo code fast on this board.
 - Adafruit Fruit Jam and an HDMI display.
 - Stock CircuitPython 10.3.1 or later (Turbo `.mpy` loading is built in on
   RP2xxx). Developed on `11.0.0-alpha.1-126-gea91926f34`.
-- Adafruit's `mpy-cross` for the **same** firmware version, saved as
-  `tools/mpy-cross`: builds are at
-  `https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/macos/mpy-cross-macos-<version>-arm64`
-  (other platforms in the neighboring folders). Check `boot_out.txt` for the
-  version.
 
-## build and run
+## build from source
+
+- Adafruit's `mpy-cross` that emits `.mpy` version 6.3 (the one for your
+  firmware is a safe choice: `mpy-cross --version` says which `.mpy`
+  version it writes), saved as `tools/mpy-cross`: builds are at
+  `https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/macos/mpy-cross-macos-<version>-arm64`
+  (other platforms in the neighboring folders). A native `.mpy` loads when
+  its `.mpy` version and sub-version, architecture (`armv7emsp`) and
+  small-int width match the firmware's, not only on the exact firmware it
+  was built for.
+- Python 3 with NumPy and Pillow for the tools.
 
 ```sh
 python3 tools/build.py --deploy        # compile src/ to lib/*.mpy, copy lib, app and assets to CIRCUITPY
+python3 tools/build.py --bundle        # or: zip it all, CIRCUITPY's layout, as build/cg-turbo-demos.zip
 python3 tools/serial_log.py --restart  # restart code.py and watch the console (frame times)
 ```
 
-The first deploy saves the board's existing `code.py` to `backup/`.
-`app/code.py` picks the demo (`voxel_demo`, or `fb_bench` for the
-framebuffer benchmark).
+The first deploy saves the board's existing `code.py` to `backup/`. Deploy
+doesn't install `adafruit_display_text` (the bundle does): put it in
+CIRCUITPY's `lib` with `circup install adafruit_display_text`, or from the
+[library bundle](https://circuitpython.org/libraries).
+`app/code.py` starts the menu (see "demos" for skipping it).
 
 ## layout
 
