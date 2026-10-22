@@ -12,7 +12,7 @@ Output is 320x240 RGB565, pixel-doubled to 640x480 HDMI by `picodvi`.
 ## install on a Fruit Jam
 
 1. Install [CircuitPython](https://circuitpython.org/board/adafruit_fruit_jam/)
-   10.3.1 or later on the Fruit Jam (developed on 11.0.0-alpha.1). The demos'
+   10.3.1 or later on the Fruit Jam (tested on 10.3.1 and 11.0.0-alpha.1). The demos'
    compiled modules are `.mpy` version 6.3: if a future CircuitPython moves
    to a newer `.mpy` version, they stop loading (`ValueError: incompatible
    .mpy file`) until rebuilt (see "build from source").
@@ -120,7 +120,8 @@ about making Turbo code fast on this board.
 
 - Adafruit Fruit Jam and an HDMI display.
 - Stock CircuitPython 10.3.1 or later (Turbo `.mpy` loading is built in on
-  RP2xxx). Developed on `11.0.0-alpha.1-126-gea91926f34`.
+  RP2xxx). Developed on `11.0.0-alpha.1-126-gea91926f34`; the same build also
+  runs on 10.3.1.
 
 ## build from source
 
