@@ -1,5 +1,12 @@
 # cg-turbo-demos
 
+> **This project has moved** to the Adafruit Learning System Guides repo:
+> [CircuitPython_Turbo/CG_Turbo_Demos](https://github.com/adafruit/Adafruit_Learning_System_Guides/tree/main/CircuitPython_Turbo/CG_Turbo_Demos).
+> This repo is archived: its history and the
+> [v1.0.0 release](https://github.com/adafruit/cg-turbo-demos/releases/tag/v1.0.0)
+> stay here, read-only. For changes, issues or pull requests, use the
+> Learn repo.
+
 Computer graphics demos in the spirit of early SIGGRAPH, running on an
 [Adafruit Fruit Jam](https://www.adafruit.com/search?q=fruit+jam) (RP2350) in
 CircuitPython, with the hot loops in
